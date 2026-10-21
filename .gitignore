@@ -1,0 +1,17 @@
+node_modules/
+dist/
+release/
+.build-cache/
+config.json
+accounts.json
+settings.json
+voices/
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+*.token
+*.pem
+*.key
+
