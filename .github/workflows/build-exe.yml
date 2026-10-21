@@ -55,5 +55,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          gh release create $env:GITHUB_REF_NAME "dist/MultiChat-$($env:GITHUB_REF_NAME.TrimStart('v'))-windows-x64.zip" --title "MultiChat $($env:GITHUB_REF_NAME)" --notes-file dist/RELEASE_NOTES.md
+          $tag = $env:GITHUB_REF_NAME
+          $archive = "dist/MultiChat-$($tag.TrimStart('v'))-windows-x64.zip"
+          $title = "MultiChat $tag"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release edit $tag --title $title --notes-file dist/RELEASE_NOTES.md
+            if ($LASTEXITCODE -ne 0) { throw 'Could not update the GitHub Release.' }
+            gh release upload $tag $archive --clobber
+          } else {
+            gh release create $tag $archive --title $title --notes-file dist/RELEASE_NOTES.md
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish the Windows archive.' }
 
