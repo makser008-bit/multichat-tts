@@ -1,0 +1,59 @@
+name: Build MultiChat
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm ci
+      - name: Package Windows app
+        shell: pwsh
+        run: |
+          npx --yes @electron/packager . MultiChat --platform=win32 --arch=x64 --out=dist --overwrite --electron-version=33.4.11 --icon=assets/icon.ico --tmpdir=dist/.build-tmp --ignore="^/dist" --ignore="^/\.github" --ignore="^/\.git" --ignore="^/\.build-cache" --ignore="\.bat$" --ignore="^/accounts\.json$" --ignore="^/config\.json$" --ignore="^/settings\.json$" --ignore="^/voices(/.*)?$" --ignore="^/\.env.*$" --ignore="\.log$" --ignore="\.token$"
+          if ($LASTEXITCODE -ne 0) { throw 'Electron Packager failed.' }
+          $app = Join-Path $PWD 'dist/MultiChat-win32-x64'
+          Copy-Item config.example.json (Join-Path $app 'config.example.json') -Force
+          $forbidden = @('config.json', 'accounts.json', 'settings.json', 'voices', '.env')
+          foreach ($name in $forbidden) {
+            if (Test-Path (Join-Path $app $name)) { throw "Personal data found in package: $name" }
+          }
+      - name: Prepare release notes and archive
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = $tag.TrimStart('v')
+          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($version -ne $packageVersion) { throw "Tag $tag does not match package.json version $packageVersion" }
+          $content = Get-Content CHANGELOG.md -Raw
+          $pattern = '(?ms)^## \[' + [regex]::Escape($version) + '\].*?\r?\n(.*?)(?=^## \[|\z)'
+          $match = [regex]::Match($content, $pattern)
+          if (-not $match.Success -or [string]::IsNullOrWhiteSpace($match.Groups[1].Value)) { throw "CHANGELOG.md must contain full notes for $version" }
+          $notesPath = Join-Path $PWD 'dist/RELEASE_NOTES.md'
+          Set-Content -Path $notesPath -Value $match.Groups[1].Value.Trim() -Encoding utf8
+          Compress-Archive -Path 'dist/MultiChat-win32-x64/*' -DestinationPath "dist/MultiChat-$version-windows-x64.zip" -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MultiChat-win
+          path: dist/MultiChat-win32-x64/
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release create $env:GITHUB_REF_NAME "dist/MultiChat-$($env:GITHUB_REF_NAME.TrimStart('v'))-windows-x64.zip" --title "MultiChat $($env:GITHUB_REF_NAME)" --notes-file dist/RELEASE_NOTES.md
+
