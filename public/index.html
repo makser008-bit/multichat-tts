@@ -1,0 +1,1761 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MultiChat + озвучка</title>
+<style>
+:root{--bg:#0e0e12;--panel:#17171d;--line:#262631;--txt:#ececf1;--mut:#8b8b99;--acc:#7c5cff}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:var(--bg);color:var(--txt);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.app{display:grid;grid-template-columns:330px 1fr;height:100%}
+aside{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:16px}
+.app-version-footer{border-top:1px solid var(--line);margin-top:12px;padding-top:8px;color:var(--mut);font-size:11px;text-align:left}
+.brand-head{margin:0 0 8px}
+.brand-head img{display:block;width:100%;max-width:298px;height:auto;object-fit:contain}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin:20px 0 8px}
+label{display:block;margin:10px 0 3px;color:var(--mut);font-size:12px}
+label output{color:var(--txt);float:right}
+input[type=text],input[type=password],input[type=number],select,textarea{width:100%;padding:8px 10px;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;font:inherit}
+textarea{resize:vertical;min-height:44px}
+input:focus,select:focus,textarea:focus{outline:1px solid var(--acc)}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.chk{display:flex;gap:8px;align-items:center;color:var(--txt);font-size:13px;margin:7px 0;cursor:pointer}
+.chk input{accent-color:var(--acc)}
+.row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+button,a.btn{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block}
+button.ghost,a.btn.ghost{background:#24242e;color:var(--txt)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.sm{padding:4px 10px!important;font-size:12px!important}
+button:hover:not(:disabled),a.btn:hover{filter:brightness(1.1)}
+a.lnk{color:#9d86ff;font-size:12px}
+.fold{margin:8px 0;border:1px solid var(--line);border-radius:8px;padding:0 10px;background:#13131a}
+.fold>summary{cursor:pointer;color:var(--mut);font-size:12px;padding:7px 0;user-select:none}
+.fold[open]>summary{margin-bottom:2px}
+.fold .note:first-of-type{margin-top:0}
+.note{font-size:12px;color:var(--mut);margin:8px 0}
+.info{width:100%;font-size:11px;color:var(--mut)}
+.info.err{color:#ff8a8d}
+.cs{color:var(--mut);font-size:11px}
+.acc{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:7px 0}
+.acc2{border-bottom:1px solid var(--line);padding:8px 0}
+.acc2:last-child{border-bottom:0}
+.ah{display:flex;gap:8px;align-items:center}
+.ah svg{width:18px;height:18px;display:block;flex:none}
+.accname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.accname.none{color:var(--mut)}
+.pls{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.evt-table{display:grid;grid-template-columns:1fr auto auto;gap:2px 14px;align-items:center;font-size:13px}
+.evt-table .eh{font-size:11px;color:var(--mut);text-transform:uppercase}
+.evt-table .chk{margin:3px 0;justify-content:center}
+.url{display:flex;gap:6px;align-items:center}
+.url input{flex:1;min-width:0}
+#piper .accname{white-space:normal}
+.diag{display:none;white-space:pre-wrap;font:11px/1.45 ui-monospace,Consolas,monospace;color:var(--mut);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0 10px;overflow-wrap:anywhere}
+.kblk{margin:10px 0}
+.kblk input{margin-top:5px}
+
+main{display:flex;flex-direction:column;min-width:0;height:100%;position:relative;min-height:0}
+header{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap;flex:none}
+#chips{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.chip{position:relative;display:flex;align-items:center;gap:6px;padding:4px 11px 4px 8px;border-radius:999px;background:#1d1d26;border:1px solid var(--line);color:var(--txt);font-size:12px;font-weight:600}
+.chip .ic{width:18px;height:18px;display:block;flex:none}
+.chip .ic svg{width:18px;height:18px;display:block}
+.chip .cs{font-size:12px;font-weight:600;color:var(--mut)}
+.chip[data-live=true] .cs{color:#3ddc84}
+.chip.hidden{opacity:.35}
+.dot{position:absolute;right:-3px;bottom:-3px;width:11px;height:11px;border-radius:50%;border:2px solid var(--bg);background:#555}
+.chip[data-state=ok] .dot{background:#3ddc84}
+.chip[data-state=connecting] .dot{background:#f5c542;animation:pulse 1s infinite}
+.chip[data-state=waiting] .dot{background:#4aa8ff}
+.chip[data-state=error] .dot{background:#ff5a5f}
+.lv{position:absolute;right:-3px;top:-3px;width:11px;height:11px;border-radius:50%;border:2px solid var(--bg);display:none}
+.lv.on{display:block;background:#ff3b3b;box-shadow:0 0 6px #ff3b3b}
+@keyframes pulse{50%{opacity:.35}}
+.grow{flex:1}
+#srv{font-size:12px;color:var(--mut)}
+#hint{display:none;background:#3a2f12;color:#f5c542;padding:6px 14px;font-size:12px}
+#feed{flex:1;overflow:auto;padding:10px 14px;min-height:0}
+#jump{display:none;position:absolute;left:50%;bottom:94px;transform:translateX(-50%);background:var(--acc);color:#fff;border-radius:999px;padding:6px 14px;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:5}
+#viewers{flex:none;display:flex;flex-wrap:nowrap;gap:14px;align-items:center;padding:7px 14px;border-top:1px solid var(--line);background:var(--panel);font-size:13px}
+#vlist{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;flex:1 1 auto;min-width:0}
+#sysm{margin-left:auto;flex:none;display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}
+#sysm[hidden]{display:none}
+#sysm .sysi{display:flex;align-items:center;gap:5px;cursor:help}
+#sysm svg{width:14px;height:14px;display:block;flex:none}
+#sysm b{color:var(--txt);font-weight:600;display:inline-block}
+#smCpuV{min-width:5ch}
+/* ===== Вікно програми. Лічильники глядачів важливіші: коли місця мало, показники скорочуються ступінчасто й панель ніколи не стає вищою.
+   Порогові ширини підібрано вимірюванням для найдовших значень (ширина чату = вікно мінус 330 пікс. бічної панелі). ===== */
+.mt-short{display:none}
+@media (min-width:1150px){body:not(.dock) #smRamV{min-width:14ch}body:not(.dock) #sysm[data-mem="1"][data-memfmt="usedfree"] #smRamV{min-width:31ch}body:not(.dock) #sysm[data-mem="1"][data-memfmt="usedtotal"] #smRamV{min-width:20ch}body:not(.dock) #sysm[data-mem="0"] #smRamV{min-width:5ch}}
+@media (max-width:1059px){body:not(.dock) #sysm[data-mem="1"][data-memfmt="usedfree"] .lbl{display:none}}   /* спершу підписи CPU/RAM (для формату з залишком) */
+@media (max-width:994px){body:not(.dock) #sysm[data-mem="1"][data-memfmt="usedtotal"] .lbl{display:none}}   /* формат «використано/весь обсяг»: спершу підписи */
+@media (max-width:934px){body:not(.dock) #sysm .mt-long{display:none}body:not(.dock) #sysm .mt-short{display:inline}}   /* потім «9,9/16 ГБ» -> «9,9 ГБ» */
+@media (max-width:999px){body:not(.dock) #sysm .memfree{display:none}}   /* потім залишок */
+@media (max-width:949px){body:not(.dock) #sysm .lbl{display:none}}   /* підписи для решти форматів */
+@media (max-width:889px){body:not(.dock) #sysm .memamt{display:none}}   /* потім обсяг у дужках: лишаються відсотки */
+@media (max-width:824px){body:not(.dock) #sysm{display:none}}   /* у зовсім вузькому вікні лічильники важливіші */
+/* ===== Панель OBS (/?dock=1): ширина панелі = ширина сторінки. Показники лишаються видимими завжди: якщо в рядок із лічильниками не вміщаються,
+   переходять на власний рядок (праворуч), а за потреби скорочуються (пороги нижче підібрано вимірюванням). ===== */
+.dock #viewers{flex-wrap:wrap}
+.dock #sysm{font-size:11px}
+/* пороги = ширина блоку показників у панелі (виміряна для найдовших значень) + 16 пікс. відступів + 4 пікс. запасу */
+@media (max-width:263px){body.dock #sysm[data-mem="1"][data-memfmt="used"] .lbl{display:none}}   /* «Використано»: спершу підписи CPU/RAM */
+@media (max-width:362px){body.dock #sysm[data-mem="1"][data-memfmt="usedfree"] .lbl{display:none}}   /* «з залишком»: спершу підписи */
+@media (max-width:313px){body.dock #sysm[data-mem="1"][data-memfmt="usedtotal"] .lbl{display:none}}   /* «з весь обсягом»: спершу підписи */
+@media (max-width:203px){body.dock #sysm[data-mem="0"] .lbl{display:none}}   /* без обсягу в дужках */
+@media (max-width:305px){body.dock #sysm .memfree{display:none}}   /* далі залишок */
+@media (max-width:256px){body.dock #sysm .mt-long{display:none}body.dock #sysm .mt-short{display:inline}}   /* далі «9,9/16 ГБ» -> «9,9 ГБ» */
+@media (max-width:206px){body.dock #sysm .memamt{display:none}}   /* найвужча панель: лише відсотки */
+/* Пороги для панелі OBS: ширина блоку (виміряна для найдовших значень) + 28 пікс. (відступи панелі 16 + запас 12) */
+@media (max-width:267px){.dock #sysm[data-mem="1"][data-memfmt="used"] .lbl{display:none}}   /* used: підписи */
+@media (max-width:210px){.dock #sysm[data-mem="1"][data-memfmt="used"] .memamt{display:none}}   /* used: обсяг у дужках */
+@media (max-width:366px){.dock #sysm[data-mem="1"][data-memfmt="usedfree"] .lbl{display:none}}   /* usedfree: підписи */
+@media (max-width:309px){.dock #sysm[data-mem="1"][data-memfmt="usedfree"] .memfree{display:none}}   /* usedfree: залишок */
+@media (max-width:210px){.dock #sysm[data-mem="1"][data-memfmt="usedfree"] .memamt{display:none}}   /* usedfree: обсяг у дужках */
+@media (max-width:286px){.dock #sysm[data-mem="1"][data-memfmt="usedtotal"] .lbl{display:none}}   /* usedtotal: підписи */
+@media (max-width:229px){.dock #sysm[data-mem="1"][data-memfmt="usedtotal"] .mt-long{display:none}.dock #sysm[data-mem="1"][data-memfmt="usedtotal"] .mt-short{display:inline}}   /* usedtotal: «9,9/16 ГБ» -> «9,9 ГБ» */
+@media (max-width:210px){.dock #sysm[data-mem="1"][data-memfmt="usedtotal"] .memamt{display:none}}   /* usedtotal: обсяг у дужках */
+@media (max-width:206px){.dock #sysm[data-mem="0"] .lbl{display:none}}   /* без обсягу: підписи */
+.vc{display:flex;gap:6px;align-items:center}
+.vc.off{opacity:.45}
+.vc svg{width:15px;height:15px;display:block}
+.vsep{color:var(--mut)}
+.vt{font-weight:700}
+
+/* повідомлення: текстовий потік, щоб текст завжди було видно (під нікнеймом, коли вікно вузьке) */
+.msg{display:block;padding:4px 8px;border-radius:8px;overflow-wrap:anywhere;word-break:break-word}
+.msg:hover{background:#1b1b23}
+.pi{display:inline-block;width:14px;height:14px;vertical-align:-2px;margin-right:6px}
+.pi svg{width:14px;height:14px;display:block}
+.user{font-weight:600;margin-right:8px}
+.ico{margin-right:6px}
+.mute{opacity:0;cursor:pointer;margin-left:8px;font-size:11px}
+.msg:hover .mute{opacity:.7}
+.mute:hover{opacity:1!important}
+.evt{background:#241f33;border-left:3px solid var(--acc)}
+.evt .text{color:#d9ccff}
+.evt.k-gift,.evt.k-bits{background:#2a2314;border-left-color:#ffb02e}
+.evt.k-gift .text,.evt.k-bits .text{color:#ffd98a}
+.sys{color:var(--mut);font-size:12px;padding:4px 8px}
+.sys.err{color:#ff8a8d}
+#feed.hide-twitch .p-twitch,#feed.hide-youtube .p-youtube,#feed.hide-tiktok .p-tiktok,#feed.hide-kick .p-kick{display:none}
+
+#ctrl{flex:none;display:flex;gap:6px;padding:6px 8px;border-top:1px solid var(--line);background:var(--panel)}
+#ctrl button{flex:1;min-height:36px;padding:6px 4px;font-size:12px;line-height:1.2}
+.seg{display:flex}
+.seg button{flex:1;border-radius:0;background:#24242e;color:var(--txt)}
+.seg button:first-child{border-radius:8px 0 0 8px}
+.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button.on{background:var(--acc);color:#fff}
+/* режим панелі OBS */
+.dock #feed{scrollbar-width:none;-ms-overflow-style:none}
+.dock #feed::-webkit-scrollbar{display:none;width:0;height:0}
+.dock .app{display:flex;flex-direction:column;height:100%}
+.dock aside,.dock #clearfeed,.dock #srv{display:none}
+.dock .mute{font-size:13px;padding:0 4px}
+.dock main{flex:1;height:auto}
+.dock header{padding:6px 8px;gap:9px}
+.dock .chip{padding:3px 9px 3px 6px;font-size:11px}
+.dock #feed{padding:6px 8px;font-size:13px}
+.dock #viewers{padding:5px 8px;gap:3px 10px;font-size:12px}
+@media(max-width:800px){.app{grid-template-columns:1fr;grid-template-rows:auto 1fr}aside{max-height:45vh;border-right:0;border-bottom:1px solid var(--line)}}
+/* групи налаштувань (гілки й теми) */
+.gtools{display:flex;gap:6px;margin:8px 0 4px}
+.grp{border:1px solid var(--line);border-radius:10px;margin:8px 0;background:#13131a}
+.grp>summary{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;font-weight:700;font-size:13px;list-style:none;user-select:none}
+.grp>summary::-webkit-details-marker,.sub>summary::-webkit-details-marker{display:none}
+.grp>summary::before,.sub>summary::before{content:'▸';display:inline-block;width:10px;color:var(--mut);transition:transform .12s}
+.grp[open]>summary::before,.sub[open]>summary::before{transform:rotate(90deg)}
+.gb{padding:0 12px 10px}
+.sub{border:1px solid var(--line);border-radius:9px;margin:8px 0 0;background:#17171d;overflow:hidden}
+.sub>summary{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;list-style:none;font-size:13px;font-weight:700;color:var(--txt);user-select:none}
+.sub[open]>summary{border-bottom:1px solid var(--line)}
+.sb{padding:0 12px 10px}
+.gbadge{margin-left:auto;font-size:11px;font-weight:600;color:var(--mut)}
+.volrow{display:flex;align-items:center;gap:10px}
+.volrow input[type=range]{flex:1;min-width:0}
+.volrow input[type=number]{width:72px;flex:none;text-align:center}
+.volrow .pct{color:var(--mut)}
+[hidden]{display:none!important}   /* атрибут hidden завжди ховає елемент, навіть якщо в нього є власний display (кнопки, блоки) */
+.tipi{display:inline-block;margin-left:4px;color:var(--mut);cursor:help;font-style:normal}
+.note.warn{color:#ffb86b}
+.note.err,#prNote.err,#admNote.err{color:#ff8a8f}
+/* сповіщення про втрату інтернету */
+#netbar{display:none;flex:none;padding:8px 12px;font-size:13px;line-height:1.35;border-bottom:1px solid var(--line)}
+#netbar b{display:block;font-size:14px}
+#netbar.lost{display:block;background:#3a1416;color:#ffc4c7;border-color:#6b2024}
+#netbar.back{display:block;background:#12301d;color:#9af2b8;border-color:#1f5a33}
+#helpModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:900;align-items:center;justify-content:center;padding:16px}
+#helpModal.show{display:flex}
+#helpModal .hbox{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:14px;width:100%;max-width:780px;max-height:min(88vh,860px);display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.6);overflow:hidden}
+#helpModal .hhead{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+#helpModal h3{margin:0;font-size:17px;flex:1}
+#helpModal .hx{flex:none;width:34px;height:34px;padding:0;border-radius:8px;background:transparent;color:var(--mut);font-size:16px;line-height:1}
+#helpModal .hx:hover{background:var(--line);color:var(--txt)}
+#helpTabs{display:flex;gap:4px;padding:8px 12px 0;border-bottom:1px solid var(--line);overflow-x:auto;flex:none}
+#helpTabs button{flex:none;background:transparent;color:var(--mut);border:0;border-bottom:2px solid transparent;border-radius:6px 6px 0 0;padding:8px 12px;font-size:13px;cursor:pointer}
+#helpTabs button:hover{color:var(--txt)}
+#helpTabs button[aria-selected="true"]{color:var(--txt);border-bottom-color:var(--acc);font-weight:600}
+#helpBody{padding:16px 20px 22px;overflow-y:auto;font-size:14px;line-height:1.55;outline:none}
+#helpBody h4{margin:18px 0 6px;font-size:15px}
+#helpBody h4:first-child{margin-top:0}
+#helpBody p{margin:6px 0}
+#helpBody ol,#helpBody ul{margin:6px 0 6px 22px;padding:0}
+#helpBody li{margin:4px 0}
+#helpBody code{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:12.5px;word-break:break-all}
+#helpBody .hcopy{display:flex;align-items:center;gap:8px;margin:6px 0;flex-wrap:wrap}
+#helpBody .hcopy .lbl{color:var(--mut);min-width:128px}
+#helpBody a.lnk{font-size:inherit}
+#helpBody .hcopy code{flex:1;min-width:0;padding:6px 8px}
+#helpBody .hcopy button{flex:none;padding:5px 10px;font-size:12px}
+#helpBody .hnote,#helpBody .hwarn{margin:10px 0;padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg)}
+#helpBody .hwarn{border-color:#8a5a1d;background:rgba(255,184,107,.08)}
+#helpBody table{border-collapse:collapse;width:100%;margin:8px 0;font-size:13px}
+#helpBody th,#helpBody td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+#helpBody th{background:var(--bg)}
+#helpBody .hchk{list-style:none;margin-left:2px}
+#helpBody .hchk label{display:flex;gap:8px;align-items:flex-start;cursor:pointer}
+#helpBody .hchk input{margin-top:4px;flex:none}
+#helpBody .hfoot{margin-top:18px;padding-top:10px;border-top:1px solid var(--line);color:var(--mut);font-size:12.5px}
+.dock #helpModal{display:none!important}
+#netModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:1000;align-items:center;justify-content:center;padding:16px}
+#netModal.show{display:flex}
+#netModal .box{background:#1b1b24;border:1px solid #6b2024;border-radius:14px;padding:20px 22px;max-width:420px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.6)}
+#netModal h3{margin:0 0 8px;font-size:17px;color:#ffb3b6}
+#netModal p{margin:0 0 16px}
+#netModal button{width:100%;padding:10px}
+.dock #netModal{display:none!important}
+.chip.nonet .cs{color:#f5c542}
+.chip.nonet{opacity:.75}
+/* смуги прокручування приховані скрізь (прокрутка колесом, тачпадом і клавішами працює) */
+*{scrollbar-width:none;-ms-overflow-style:none}
+*::-webkit-scrollbar{display:none;width:0;height:0}
+/* поля ключів: кнопка-око біля кожного поля */
+.krow{display:flex;gap:6px;align-items:center;margin-top:5px}
+.krow input{flex:1;margin-top:0;min-width:0}
+.eye{flex:none;width:36px;height:36px;padding:0;border-radius:8px;background:#24242e;color:var(--mut);position:relative;font-size:16px;line-height:1}
+.eye.on{background:var(--acc);color:#fff}
+.eye:not(.on)::after{content:'';position:absolute;left:8px;right:8px;top:50%;height:2px;background:currentColor;transform:rotate(-35deg);border-radius:2px}
+button.danger{background:#b42318;color:#fff}
+#confirmModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:1001;align-items:center;justify-content:center;padding:16px}
+#confirmModal.show{display:flex}
+#confirmModal .box{background:#1b1b24;border:1px solid var(--line);border-radius:14px;padding:20px 22px;max-width:420px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.6)}
+#confirmModal h3{margin:0 0 8px;font-size:17px}
+#confirmModal p{margin:0 0 16px;color:var(--txt)}
+.cfrow{display:flex;gap:8px}
+.cfrow button{flex:1;padding:10px}
+</style>
+</head>
+<body>
+<div class="app">
+<aside>
+  <div class="brand-head"><img src="/assets/multichat-wordmark.png" alt="MultiChat + озвучка" width="1800" height="469"></div>
+  <div class="gtools"><button class="ghost sm" id="expAll">Розгорнути все</button><button class="ghost sm" id="colAll">Згорнути все</button></div>
+
+  <details class="grp" data-ui="g_conn">
+    <summary>🔌 Підключення <span class="gbadge" id="bConn"></span></summary>
+    <div class="gb">
+      <details class="sub" data-ui="s_accs">
+        <summary>Акаунти</summary>
+        <div class="sb">
+  <div id="accs"></div>
+  <details class="fold" data-ui="accNote">
+    <summary>Підказка про підключення і значки</summary>
+    <p class="note">Twitch, Kick, TikTok: впиши нік каналу. YouTube: вхід через Google. Кнопка «Увійти» - додатковий спосіб авторизації (потрібні ключі, див. нижче; для TikTok вхід недоступний). Далі застосунок сам підключається, щойно ти в ефірі.</p>
+    <p class="note">Значки угорі: «Онлайн» - стрім у ефірі, «Офлайн» - стріму немає. Крапка знизу показує підключення до чату: зелена - підключено, жовта - підключення, синя - очікування стріму, червона - помилка, сіра - не підключено; червона крапка зверху - LIVE. Клік по значку приховує або показує повідомлення платформи.</p>
+  </details>
+  </div>
+      </details>
+    </div>
+  </details>
+
+  <details class="grp" data-ui="g_api">
+    <summary>🔑 API-ключі</summary>
+    <div class="gb">
+      <details class="sub" data-ui="keys">
+        <summary>Ключі для кнопок «Увійти»</summary>
+        <div class="sb">
+          <p class="note">Створи застосунок на сайті сервісу, встав Client ID і Secret. Redirect URI має збігатися з наведеним. Ключі зберігаються у config.json поруч із програмою.</p>
+          <div class="row" style="margin:0 0 8px"><button class="sm" id="helpOpen" type="button">📘 Покрокова інструкція: як отримати ключі</button></div>
+          <div id="keys"></div>
+          <div class="row" style="margin-top:6px"><button id="keysSave" class="sm">Зберегти ключі</button><button id="keysClear" class="sm danger">Очистити API-ключі</button></div>
+          <p class="note">Ключі приховані; кнопка з оком біля поля показує або ховає лише цей ключ.</p>
+        </div>
+      </details>
+    </div>
+  </details>
+
+  <details class="grp" data-ui="g_tts">
+    <summary>🔊 Озвучка <span class="gbadge" id="bTts"></span></summary>
+    <div class="gb">
+      <label class="chk"><input type="checkbox" data-k="tts.on"> Озвучувати чат</label>
+  
+      <details class="sub" data-ui="s_voice">
+        <summary>Голос і звук</summary>
+        <div class="sb">
+  <label>Голос</label>
+  <select id="voice"></select>
+  <details class="fold" data-ui="piper">
+    <summary>Офлайн-голоси (завантаження)</summary>
+    <div id="piper"></div>
+    <div class="row" style="margin:4px 0 0"><button class="ghost sm" id="piperDiag">Перевірити голос</button></div>
+    <pre id="diag" class="diag"></pre>
+  </details>
+  <label>Швидкість <output data-o="tts.rate"></output></label>
+  <input type="range" data-k="tts.rate" min="0.5" max="2" step="0.1">
+  <label>Висота (лише системні голоси) <output data-o="tts.pitch"></output></label>
+  <input type="range" data-k="tts.pitch" min="0.5" max="2" step="0.1">
+  <label for="ttsVolNum">Гучність голосу бота (%) <span class="tipi" title="Змінює лише гучність голосу бота в цьому застосунку. Гучність інших програм Windows, системні звуки та звук сповіщення про інтернет не змінюються. 0% - без звуку, 100% - максимум.">ⓘ</span></label>
+  <div class="volrow">
+    <input type="range" id="ttsVolRange" min="0" max="100" step="1" aria-label="Гучність голосу бота, відсотки">
+    <input type="number" id="ttsVolNum" min="0" max="100" step="1" inputmode="numeric" aria-label="Гучність голосу бота, відсотки">
+    <span class="pct">%</span>
+  </div>
+
+  <div class="row">
+    <button class="ghost" id="test">Тест озвучки</button>
+  </div>
+
+  </div>
+      </details>
+      <details class="sub" data-ui="s_what">
+        <summary>Що озвучувати</summary>
+        <div class="sb">
+  <label class="chk"><input type="checkbox" data-k="tts.readName"> Читати нікнейм перед повідомленням</label>
+  <label class="chk"><input type="checkbox" data-k="tts.ignoreCmd"> Не озвучувати команди (повідомлення, що починаються з !)</label>
+  <label class="chk"><input type="checkbox" data-k="tts.skipMentions"> Не озвучувати згадування (@нік), решту тексту читати</label>
+  <label class="chk"><input type="checkbox" data-k="tts.cleanSymbols"> Не озвучувати зайві символи й емодзі</label>
+  <label class="chk"><input type="checkbox" data-k="tts.skipLinks"> Не читати посилання</label>
+
+  <label>Озвучувати з платформ</label>
+  <div class="pls">
+    <label class="chk"><input type="checkbox" data-k="tts.pl.twitch"> Twitch</label>
+    <label class="chk"><input type="checkbox" data-k="tts.pl.youtube"> YouTube</label>
+    <label class="chk"><input type="checkbox" data-k="tts.pl.tiktok"> TikTok</label>
+    <label class="chk"><input type="checkbox" data-k="tts.pl.kick"> Kick</label>
+  </div>
+
+  </div>
+      </details>
+      <details class="sub" data-ui="s_filter">
+        <summary>Обмеження і винятки</summary>
+        <div class="sb">
+  <label>Макс. довжина повідомлення (символів)</label>
+  <input type="number" data-k="tts.maxLen" min="10" max="1000">
+  <label>Макс. черга (старі відкидаються)</label>
+  <input type="number" data-k="tts.maxQueue" min="1" max="50">
+  <label>Озвучувати лише з префіксом (порожньо = все)</label>
+  <input type="text" data-k="tts.prefix" placeholder="наприклад: !say">
+  <label>Заборонені слова (через кому)</label>
+  <input type="text" data-k="tts.blocked" placeholder="слово1, слово2">
+  <label>Не озвучувати цих глядачів (нікнейми через кому або з нового рядка)</label>
+  <textarea data-k="tts.muted" rows="2" placeholder="nightbot, streamelements"></textarea>
+  <p class="note">Швидко додати глядача: наведи курсор на його повідомлення в чаті й натисни 🔇.</p>
+
+  </div>
+      </details>
+    </div>
+  </details>
+
+  <details class="grp" data-ui="g_chat">
+    <summary>💬 Події в чаті</summary>
+    <div class="gb">
+      <label class="chk"><input type="checkbox" data-k="events"> Показувати події в чаті</label>
+      <label class="chk"><input type="checkbox" data-k="tts.events"> Озвучувати події</label>
+      <details class="sub" data-ui="s_event_tts">
+        <summary>Налаштування типів подій</summary>
+        <div class="sb">
+          <div class="evt-table">
+            <span class="eh">Подія</span><span class="eh">У чаті</span><span class="eh">Озвучка</span>
+            <span>Фоли</span><label class="chk"><input type="checkbox" data-k="ev.follow"></label><label class="chk"><input type="checkbox" data-k="evv.follow"></label>
+            <span>Підписки</span><label class="chk"><input type="checkbox" data-k="ev.sub"></label><label class="chk"><input type="checkbox" data-k="evv.sub"></label>
+            <span>Подарунки</span><label class="chk"><input type="checkbox" data-k="ev.gift"></label><label class="chk"><input type="checkbox" data-k="evv.gift"></label>
+            <span>Рейди</span><label class="chk"><input type="checkbox" data-k="ev.raid"></label><label class="chk"><input type="checkbox" data-k="evv.raid"></label>
+            <span>Біти</span><label class="chk"><input type="checkbox" data-k="ev.bits"></label><label class="chk"><input type="checkbox" data-k="evv.bits"></label>
+            <span>Нагороди</span><label class="chk"><input type="checkbox" data-k="ev.points"></label><label class="chk"><input type="checkbox" data-k="evv.points"></label>
+            <span>Hype Train</span><label class="chk"><input type="checkbox" data-k="ev.hype"></label><label class="chk"><input type="checkbox" data-k="evv.hype"></label>
+            <span>Репости</span><label class="chk"><input type="checkbox" data-k="ev.share"></label><label class="chk"><input type="checkbox" data-k="evv.share"></label>
+          </div>
+          <p class="note">Подія озвучується, якщо вона ввімкнена тут і позначена в стовпці «Озвучка».</p>
+        </div>
+      </details>
+  </div>
+  </details>
+
+  <details class="grp" data-ui="g_obs">
+    <summary>📺 OBS - чат у панелі</summary>
+    <div class="gb">
+      <details class="sub" data-ui="s_obs_settings">
+        <summary>Параметри панелі</summary>
+        <div class="sb">
+          <label>Посилання для OBS</label>
+          <div class="url"><input type="text" id="obsUrl" readonly><button id="obsCopy" class="sm">Копіювати</button></div>
+          <label class="chk"><input type="checkbox" id="obsTts"> З озвучкою в панелі (зазвичай не потрібно)</label>
+          <label class="chk"><input type="checkbox" data-k="sys.obs"> Показувати навантаження (CPU, RAM) у нижній панелі <span class="tipi" title="Показники праворуч від лічильника глядачів у чаті OBS. Вимикається одразу, посилання копіювати заново не потрібно.">ⓘ</span></label>
+          <p class="note">Що саме показувати (лише застосунок чи вся система, обсяг у дужках) налаштовується в блоці «Програма» і діє і в панелі OBS.</p>
+          <details class="fold" data-ui="obsNote">
+            <summary>Підказка: як додати в OBS</summary>
+            <p class="note">OBS → Вигляд (View) → Панелі (Docks) → Користувацькі браузерні панелі (Custom Browser Docks...). Назви панель «Чат», встав посилання вище й натисни «Застосувати». MultiChat має бути запущений.</p>
+          </details>
+        </div>
+      </details>
+  </div>
+  </details>
+
+  <details class="grp" data-ui="g_app">
+    <summary>⚙️ Програма</summary>
+    <div class="gb">
+      <details class="sub" data-ui="s_perf">
+        <summary>Продуктивність</summary>
+        <div class="sb">
+  <label>Апаратне прискорення</label>
+  <div class="seg" id="hwSeg"><button data-v="1">Увімкнено</button><button data-v="0">Вимкнено</button></div>
+  <p class="note" id="hwNote"></p>
+  <div class="row" style="margin-top:4px"><button class="sm" id="hwRestart" style="display:none">Перезапустити програму</button></div>
+
+  <label style="margin-top:14px">Пріоритет процесу <span class="tipi" title="Визначає, скільки процесорного часу Windows віддає цій програмі. Змінюється лише пріоритет самої програми, інші процеси Windows не чіпаються.">ⓘ</span></label>
+  <select id="prSel">
+    <option value="idle">Низький (Idle)</option>
+    <option value="belowNormal">Нижче звичайного (Below Normal)</option>
+    <option value="normal">Звичайний (Normal) - рекомендовано</option>
+    <option value="aboveNormal">Вище звичайного (Above Normal)</option>
+    <option value="high">Високий (High)</option>
+    <option value="realtime">Реального часу (Realtime)</option>
+  </select>
+  <p class="note" id="prHint">Для стримінгового застосунку зазвичай достатньо «Звичайний (Normal)» або «Вище звичайного (Above Normal)».</p>
+  <p class="note warn">⚠️ Увага! Пріоритет «Реального часу (Realtime)» може порушити нормальну роботу Windows, OBS та інших програм і спричинити зависання системи. Не рекомендується використовувати його без особливої потреби.</p>
+  <p class="note" id="prNote"></p>
+
+  <label class="chk" style="margin-top:14px"><input type="checkbox" data-k="sys.on"> Показувати навантаження (CPU, RAM) у нижній панелі програми <span class="tipi" title="Показники праворуч від лічильника глядачів. Збір даних іде лише поки хоч одне вікно (програма або панель OBS) їх показує; коли вимкнено всюди, збір зупиняється повністю.">ⓘ</span></label>
+  <label>Що показувати</label>
+  <div class="seg" id="sysSeg"><button data-v="app">Лише застосунок</button><button data-v="system">Вся система</button></div>
+  <p class="note">Оновлюється раз на 1,5 с, лише поки вікно видно. «Лише застосунок» - частка процесора й пам'яті, яку займає MultiChat (усі його процеси). Прав адміністратора не потрібно.</p>
+  <label class="chk" style="margin-top:12px"><input type="checkbox" data-k="sys.mem"> Показувати обсяг пам'яті в дужках</label>
+  <label>Що показувати в дужках</label>
+  <select id="memFmtSel">
+    <option value="used">Використано</option>
+    <option value="usedfree">Використано і залишок</option>
+    <option value="usedtotal">Використано і весь обсяг</option>
+  </select>
+  <p class="note">Приклади: «RAM 62% (9,9 ГБ)», «RAM 62% (9,9 ГБ, вільно 6,1 ГБ)» або «RAM 62% (9,9/16 ГБ)». Залишок - вільна оперативна пам'ять усього комп'ютера, весь обсяг - уся пам'ять, встановлена на ПК. У вузькому вікні довші формати скорочуються автоматично.</p>
+        </div>
+      </details>
+      <details class="sub" data-ui="s_launch">
+        <summary>Режим запуску</summary>
+        <div class="sb">
+  <label>Запуск від імені адміністратора <span class="tipi" title="Надає застосунку розширені права в Windows. Для звичайного використання рекомендується запуск без прав адміністратора.">ⓘ</span></label>
+  <div class="seg" id="admSeg"><button data-v="0">Звичайний запуск</button><button data-v="1">Від імені адміністратора</button></div>
+  <p class="note">ℹ️ Запуск від імені адміністратора надає застосунку розширені права в Windows. Вмикайте цей режим лише тоді, коли він потрібен для роботи певних функцій. Для звичайного використання рекомендується запуск без прав адміністратора.</p>
+  <p class="note" id="admNote"></p>
+  <div class="row" style="margin-top:4px"><button class="sm" id="admRestart" style="display:none">Перезапустити програму</button></div>
+        </div>
+      </details>
+      <details class="sub" data-ui="s_netsound">
+        <summary>Звук втрати інтернет-з'єднання</summary>
+        <div class="sb">
+  <label class="chk"><input type="checkbox" data-k="net.on"> Увімкнути звук сповіщення</label>
+  <label>Звуковий сигнал</label>
+  <select id="netSound"></select>
+  <div class="row" style="margin-top:8px"><button class="sm" id="netPlay">▶ Прослухати</button></div>
+  <label for="netVolNum">Гучність сигналу (%) <span class="tipi" title="Гучність звуку втрати інтернету. 0% - без звуку (лишається візуальне сповіщення), 100% - максимум. Гучність голосу бота налаштовується окремо.">ⓘ</span></label>
+  <div class="volrow">
+    <input type="range" id="netVolRange" min="0" max="100" step="1" aria-label="Гучність сигналу втрати інтернету, відсотки">
+    <input type="number" id="netVolNum" min="0" max="100" step="1" inputmode="numeric" aria-label="Гучність сигналу втрати інтернету, відсотки">
+    <span class="pct">%</span>
+  </div>
+  <label class="chk"><input type="checkbox" data-k="net.repeat"> Повторювати звук, поки інтернету немає</label>
+  <label>Інтервал повтору</label>
+  <select data-k="net.every">
+    <option value="3">кожні 3 с</option><option value="5">кожні 5 с</option><option value="10">кожні 10 с</option><option value="30">кожні 30 с</option>
+  </select>
+  <p class="note">Сигнал лунає одразу після втрати інтернету, не лунає під час відновлення і повторюється, якщо інтернет зник знову. Кнопка «Добре» у вікні сповіщення зупиняє повтор. Якщо звук вимкнено або гучність 0%, лишається лише візуальне сповіщення. Озвучення чату звук не перериває.</p>
+        </div>
+      </details>
+      <details class="sub" data-ui="s_api">
+        <summary>API-ключі</summary>
+        <div class="sb">
+  <label class="chk"><input type="checkbox" id="apiOn"> Використовувати API-ключі для кнопок «Увійти» <span class="tipi" title="Вимкнення ховає розділ «API-ключі» та всі елементи, пов'язані з ключами, і вимикає вхід через Google, Twitch і Kick. Збережені ключі та входи не видаляються: після ввімкнення все працює знову.">ⓘ</span></label>
+  <p class="note" id="apiNote"></p>
+        </div>
+      </details>
+      <details class="sub" data-ui="g_dev">
+        <summary>🛠️ Для розробників <span class="gbadge" id="bDev"></span></summary>
+        <div class="sb">
+          <p class="note">Службові функції для налагодження. Звичайному користувачеві вони не потрібні, тому за замовчуванням вимкнені.</p>
+          <label class="chk"><input type="checkbox" id="devKick"> Діагностика Kick <span class="tipi" title="Показує, які події реально приходять від Kick, і веде журнал підключення. У журнал можуть потрапити зразки повідомлень чату. Після вимкнення журнал стирається.">ⓘ</span></label>
+          <p class="note" id="devKickNote"></p>
+          <div class="row"><button class="sm ghost" id="devKickOpen" type="button">Відкрити діагностику Kick</button></div>
+        </div>
+      </details>
+    </div>
+  </details>
+
+  <div class="app-version-footer" id="appVersionFooter">v1.1.12</div>
+
+</aside>
+
+<main>
+  <header>
+    <div id="chips"></div>
+    <span class="grow"></span>
+    <span id="srv">сервер: ...</span>
+  </header>
+  <div id="netbar" role="status"></div>
+  <div id="hint">Клікни будь-де на сторінці один раз, інакше браузер може заблокувати озвучку.</div>
+  <div id="feed"></div>
+  <button id="jump">↓ Нові повідомлення</button>
+  <footer id="viewers">
+    <div id="vlist"></div>
+    <div id="sysm" hidden>
+      <span class="sysi" id="smCpu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg><span class="lbl">CPU</span><b id="smCpuV">—</b></span>
+      <span class="vsep">|</span>
+      <span class="sysi" id="smRam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="11" rx="2"/><path d="M6 10.5v2M10 10.5v2M14 10.5v2M18 10.5v2M6 17v3M10 17v3M14 17v3M18 17v3"/></svg><span class="lbl">RAM</span><b id="smRamV">—</b></span>
+    </div>
+  </footer>
+  <div id="ctrl"><button id="cSkip">Пропустити</button><button id="cClearQ">Очистити чергу</button><button id="cClearFeed">Очистити чат</button></div>
+</main>
+</div>
+
+<div id="confirmModal" role="alertdialog" aria-modal="true" aria-labelledby="cfTitle">
+  <div class="box">
+    <h3 id="cfTitle"></h3>
+    <p id="cfText"></p>
+    <div class="cfrow"><button id="cfCancel" class="ghost">Скасувати</button><button id="cfOk" class="danger">Так</button></div>
+  </div>
+</div>
+
+<div id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="hbox">
+    <div class="hhead"><h3 id="helpTitle">📘 Як отримати API-доступ</h3><button id="helpClose" type="button" class="hx" aria-label="Закрити інструкцію" title="Закрити (Esc)">✕</button></div>
+    <div id="helpTabs" role="tablist" aria-label="Розділи інструкції"></div>
+    <div id="helpBody" role="tabpanel" tabindex="0"></div>
+  </div>
+</div>
+
+<div id="netModal" role="alertdialog" aria-modal="true" aria-labelledby="netTitle">
+  <div class="box">
+    <h3 id="netTitle">⚠️ Втрачено з'єднання з інтернетом</h3>
+    <p>Перевір своє інтернет-з'єднання. Застосунок автоматично спробує відновити підключення.</p>
+    <p id="netMute" class="note" style="display:none;margin:-8px 0 14px">🔕 Звук сповіщення вимкнено в налаштуваннях (вимкнено або гучність 0%).</p>
+    <button id="netOk">Добре</button>
+  </div>
+</div>
+
+<script>
+const PL = { twitch: 'Twitch', youtube: 'YouTube', tiktok: 'TikTok', kick: 'Kick' };
+const ICONS = {
+  twitch: '<svg viewBox="0 0 24 24" fill="#9146FF"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>',
+  youtube: '<svg viewBox="0 0 24 24"><rect x="1" y="4.5" width="22" height="15" rx="4.2" fill="#FF0000"/><path d="M9.8 8.7v6.6l5.7-3.3z" fill="#fff"/></svg>',
+  tiktok: '<svg viewBox="0 0 24 24" fill="#ffffff"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>',
+  kick: '<svg viewBox="0 0 24 24" fill="#53FC18"><path d="M1.333 0h8v5.333H12V2.667h2.667V0h8v8H20v2.667h-2.667v2.666H20V16h2.667v8h-8v-2.667H12v-2.666H9.333V24h-8Z"/></svg>'
+};
+const all = v => Object.fromEntries(Object.keys(PL).map(k => [k, v]));
+const evDef = { follow: true, sub: true, gift: true, raid: true, bits: true, points: true, hype: true, share: false };
+const DEF = {
+  events: true,
+  keys: {},
+  ev: { ...evDef },
+  evv: { ...evDef },
+  show: all(true),
+  ui: { accNote: false, keys: false, obsNote: false, piper: false, g_conn: true, g_tts: true, g_chat: false, g_obs: false, g_app: false, g_api: false, g_dev: false, s_api: false, s_perf: false, s_launch: false, s_netsound: false, s_accs: false, s_voice: false, s_what: false, s_filter: false },
+  net: { on: true, sound: 'std-notify', volumePct: 70, repeat: true, every: 5 },
+  sys: { on: true, obs: true, mode: 'app', mem: true, memFmt: 'used' },
+  tts: { on: true, events: true, voice: 'edge:uk-UA-PolinaNeural', rate: 1, pitch: 1, volumePct: 100, readName: true, ignoreCmd: true, skipMentions: true, cleanSymbols: true, skipLinks: true,
+         maxLen: 200, maxQueue: 5, prefix: '', blocked: '', muted: '', pl: all(true) }
+};
+// гучність у відсотках (ціле 0..100). Старі збережені налаштування мали частку 0..1 - переносимо їх без зміни гучності
+function migrateVolume(t, def = 100) {
+  t = t || {};
+  let p = Number(t.volumePct);
+  if (t.volumePct === undefined || !Number.isFinite(p)) p = typeof t.volume === 'number' && Number.isFinite(t.volume) ? t.volume * 100 : def;
+  return Math.min(100, Math.max(0, Math.round(p)));
+}
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem('multichat') || '{}');
+    const r = { events: s.events !== false, keys: { ...s.keys }, ev: { ...DEF.ev, ...s.ev }, evv: { ...DEF.evv, ...s.evv },
+             show: { ...DEF.show, ...s.show }, ui: { ...DEF.ui, ...s.ui }, net: { ...DEF.net, ...s.net, volumePct: migrateVolume(s.net, DEF.net.volumePct) }, apiOn: s.apiOn !== false, kickDiag: s.kickDiag === true, sys: { ...DEF.sys, ...s.sys, obs: !(s.sys && s.sys.obs === false), mode: (s.sys && s.sys.mode === 'system') ? 'system' : 'app', mem: !(s.sys && s.sys.mem === false), memFmt: (s.sys && ['usedfree', 'usedtotal'].includes(s.sys.memFmt)) ? s.sys.memFmt : 'used' },
+             tts: { ...DEF.tts, ...s.tts, volumePct: migrateVolume(s.tts), pl: { ...DEF.tts.pl, ...((s.tts || {}).pl) } } };
+    delete r.tts.volume;   // застарілий ключ (частка 0..1): тепер лише volumePct
+    delete r.net.volume;
+    return r;
+  } catch { return JSON.parse(JSON.stringify(DEF)); }
+}
+let cfg = load();
+let net = { online: true, outage: 0, dismissed: false, restoredAt: 0 };   // стан інтернету (приходить із сервера)
+const NET_BACK_MS = 6000;   // скільки показується «Інтернет-з'єднання відновлено»
+const P = new URLSearchParams(location.search);
+const DOCK = P.has('dock');
+if (DOCK) document.body.classList.add('dock');
+// у панелі OBS озвучка за замовчуванням вимкнена (щоб не читало двічі); ?tts=1 вмикає, ?tts=0 вимикає
+const ttsEnabled = () => P.get('tts') === '1' ? true : P.get('tts') === '0' ? false : DOCK ? false : cfg.tts.on;
+const eventSpeechEnabled = () => P.get('tts') === '0' ? false : (P.get('tts') === '1' || !DOCK) && cfg.tts.events;
+const save = () => { try { localStorage.setItem('multichat', JSON.stringify(cfg)); } catch {} };
+const get = p => p.split('.').reduce((o, k) => o[k], cfg);
+function set(p, v) { const a = p.split('.'); const last = a.pop(); a.reduce((o, k) => o[k], cfg)[last] = v; save(); }
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+const icon = (p, cls) => { const i = el('i', cls); i.innerHTML = ICONS[p]; return i; };
+
+/* ---- прив'язка полів налаштувань ---- */
+document.querySelectorAll('[data-k]').forEach(e => {
+  const k = e.dataset.k, v = get(k);
+  const out = document.querySelector(`[data-o="${k}"]`);
+  if (e.type === 'checkbox') e.checked = v; else e.value = v;
+  if (out) out.textContent = v;
+  const upd = () => {
+    const val = e.type === 'checkbox' ? e.checked
+              : (e.type === 'range' || e.type === 'number') ? Number(e.value) : e.value;
+    set(k, val);
+    if (out) out.textContent = val;
+  };
+  e.addEventListener('input', upd);
+  e.addEventListener('change', upd);
+});
+// блоки, що згортаються (стан запам'ятовується)
+document.getElementById('expAll').onclick = () => document.querySelectorAll('details.grp, details.sub').forEach(d => { d.open = true; });
+document.getElementById('colAll').onclick = () => document.querySelectorAll('details.grp, details.sub').forEach(d => { d.open = false; });
+// відкриває елемент разом з усіма батьківськими гілками
+function openBranch(node) { for (let d = node && node.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; }
+document.querySelectorAll('details[data-ui]').forEach(d => {
+  d.open = !!cfg.ui[d.dataset.ui];
+  d.addEventListener('toggle', () => { cfg.ui[d.dataset.ui] = d.open; save(); });
+});
+
+/* ---- значки платформ: іконка + «Онлайн/Офлайн» + крапка статусу ---- */
+const feed = document.getElementById('feed');
+const chipsBox = document.getElementById('chips');
+for (const p in PL) {
+  const b = el('button', 'chip'); b.dataset.p = p; b.dataset.state = 'off';
+  const ic = el('span', 'ic'); ic.innerHTML = ICONS[p];
+  b.append(ic, el('span', 'cs', 'Офлайн'), el('i', 'dot'), el('span', 'lv'));
+  chipsBox.append(b);
+}
+// «прилипання» до низу: стежимо за положенням прокрутки, а не рахуємо в момент додавання
+let stick = true, lastUserScroll = 0;
+const jump = document.getElementById('jump');
+const atBottom = () => feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40;
+function toBottom() { feed.scrollTop = feed.scrollHeight; stick = true; jump.style.display = 'none'; }
+feed.addEventListener('scroll', () => {
+  stick = atBottom();
+  jump.style.display = stick ? 'none' : 'block';
+  if (!stick) lastUserScroll = Date.now();
+});
+function afterAppend() {
+  while (feed.children.length > 400) feed.firstChild.remove();
+  if (stick) {
+    feed.scrollTop = feed.scrollHeight;
+    requestAnimationFrame(() => { if (stick) feed.scrollTop = feed.scrollHeight; });
+  }
+}
+jump.onclick = toBottom;
+// якщо розмір чату змінився (з'явилась підказка, змінилась ширина вікна), лишаємось унизу
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => { if (stick) feed.scrollTop = feed.scrollHeight; }).observe(feed);
+// у панелі OBS повертаємось донизу самі, якщо хтось випадково прокрутив угору
+if (DOCK) setInterval(() => { if (!stick && Date.now() - lastUserScroll > 15000) toBottom(); }, 3000);
+function applyShow() {
+  for (const p in PL) {
+    feed.classList.toggle('hide-' + p, !cfg.show[p]);
+    document.querySelector(`.chip[data-p="${p}"]`).classList.toggle('hidden', !cfg.show[p]);
+  }
+}
+document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+  cfg.show[c.dataset.p] = !cfg.show[c.dataset.p]; save(); applyShow();
+}));
+applyShow();
+
+/* ---- акаунти ---- */
+let acc = { accounts: {}, configured: {} };
+const appInfo = { electron: false };   // чи працюємо у програмі MultiChat.exe (з'ясовується із сервера)
+const st = {};
+function inputRow(row, placeholder, btnText, onSubmit) {
+  const i = el('input'); i.type = 'text'; i.placeholder = placeholder; i.style.flex = '1';
+  const b = el('button', 'sm', btnText);
+  const go = () => { if (i.value.trim()) onSubmit(i.value.trim()); };
+  b.onclick = go; i.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  row.append(i, b);
+}
+const PH = { twitch: 'нік каналу, напр. imakcoc', kick: 'нік каналу на Kick', tiktok: '@нік у TikTok', youtube: '@handle або посилання' };
+const LOGIN_HINT = {
+  twitch: 'Вхід через Twitch: фоли, нагороди за бали, Hype Train',
+  youtube: 'Вхід через Google: автопідключення за каналом, нові підписники',
+  kick: 'Вхід через Kick: підтягує нік каналу',
+  tiktok: 'TikTok не надає входу для читання чату - впиши нік'
+};
+let kickDiag = cfg.kickDiag === true;   // «Діагностика Kick» (розділ «Для розробників»); джерело правди - сервер
+let apiOn = cfg.apiOn !== false;   // використання API-ключів для кнопок «Увійти» (за замовчуванням увімкнено); джерело правди - сервер (settings.json)
+const ACC_NOTE_ON = 'Twitch, Kick, TikTok: впиши нік каналу. YouTube: впиши @handle або посилання на канал чи трансляцію, або увійди через Google (потрібні API-ключі, розділ «🔑 API-ключі»). Кнопка «Увійти» - додатковий спосіб авторизації (для TikTok вхід недоступний). Далі застосунок сам підключається, щойно ти в ефірі.';
+const ACC_NOTE_OFF = 'Twitch, Kick, TikTok: впиши нік каналу. YouTube: впиши @handle або посилання на канал чи трансляцію. Кнопки «Увійти» вимкнено, бо використання API-ключів вимкнено в налаштуваннях «⚙️ Програма». Далі застосунок сам підключається, щойно ти в ефірі.';
+function renderApiState() {   // показує або ховає все, що пов'язано з API-ключами
+  const chk = document.getElementById('apiOn'); chk.checked = apiOn;
+  document.querySelector('details[data-ui="g_api"]').hidden = !apiOn;   // розділ «API-ключі» видно лише коли галочку ввімкнено
+  document.getElementById('apiNote').textContent = apiOn
+    ? 'Увімкнено: розділ «🔑 API-ключі» з полями ключів та інструкцією показано в налаштуваннях, а кнопки «Увійти» біля сервісів працюють, якщо введено ключі.'
+    : 'Вимкнено: розділ «🔑 API-ключі», кнопки «Увійти» та інструкція приховані, вхід через Google, Twitch і Kick та події, що від нього залежать, вимкнено. Чат працює за ніком чи посиланням на канал. Збережені ключі та входи не видаляються.';
+  const n = document.querySelector('details[data-ui="accNote"] .note'); if (n) n.textContent = apiOn ? ACC_NOTE_ON : ACC_NOTE_OFF;
+  if (!apiOn) { if (typeof closeHelp === 'function' && document.getElementById('helpModal').classList.contains('show')) closeHelp(); const k = document.getElementById('keys'); if (k) k.textContent = ''; }
+}
+function renderDevState() {
+  document.getElementById('devKick').checked = kickDiag;
+  document.getElementById('bDev').textContent = kickDiag ? 'діагностика Kick увімкнена' : '';
+  document.getElementById('devKickNote').textContent = kickDiag
+    ? 'Увімкнено: біля Kick у «Підключенні» є кнопка «Діагностика Kick», сервер веде журнал підключення.'
+    : 'Вимкнено: кнопки немає, сторінка діагностики закрита, журнал не ведеться.';
+  document.getElementById('devKickOpen').hidden = !kickDiag;
+}
+function setKickDiag(v) {   // застосовує стан (з відповіді сервера чи з іншого вікна); без повторного запиту на сервер
+  v = v === true;
+  kickDiag = v;
+  if (cfg.kickDiag !== v) { cfg.kickDiag = v; save(); }
+  renderDevState(); renderAccounts();
+}
+function setApiOn(v) {   // застосовує стан (з відповіді сервера чи з іншого вікна); без повторного запиту на сервер
+  v = v !== false;
+  apiOn = v;
+  if (cfg.apiOn !== v) { cfg.apiOn = v; save(); }
+  renderApiState();
+  renderAccounts(); renderKeys();
+}
+function openKeys(p) {
+  if (!apiOn) return;
+  const i = document.querySelector(`#keys [data-p="${p}"] input`);
+  openBranch(i || document.querySelector('details[data-ui="keys"]'));
+  if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); }
+  addSys(`Щоб працювала кнопка «Увійти» біля ${PL[p]}, спершу додай ключі в розділі «API-ключі».`);
+}
+function updateBadges() {
+  const n = Object.values(acc.accounts || {}).filter(Boolean).length;
+  document.getElementById('bConn').textContent = `${n}/${Object.keys(PL).length} підключено`;
+  document.getElementById('bTts').textContent = cfg.tts.on ? 'увімкнено' : 'вимкнено';
+}
+document.addEventListener('change', updateBadges);
+function renderAccounts() {
+  updateBadges();
+  const box = document.getElementById('accs');
+  if (box.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
+  box.innerHTML = '';
+  for (const p in PL) {
+    const a = acc.accounts[p], ok = acc.configured[p], s = st[p];
+    const card = el('div', 'acc2');
+    const head = el('div', 'ah');
+    head.append(icon(p), el('b', null, PL[p]), el('span', 'accname' + (a ? '' : ' none'), a ? a.name : 'не підключено'));
+    card.append(head);
+    if (!a) { const r = el('div', 'acc'); inputRow(r, PH[p], 'Зберегти', v => post('/api/channel/' + p, { value: v })); card.append(r); }
+    const br = el('div', 'acc');
+    if (apiOn) {   // кнопки входу є лише коли використання API-ключів увімкнено
+      const lb = el('button', (a && a.auth) ? 'ghost sm' : 'sm', (a && a.auth) ? 'Увійти знову' : 'Увійти');
+      lb.title = LOGIN_HINT[p];
+      if (p === 'tiktok') lb.disabled = true;
+      else lb.onclick = () => { if (ok) location.href = '/auth/' + p + '/login'; else openKeys(p); };
+      br.append(lb);
+    }
+    if (a) {   // «Вийти» водночас відключає канал, тому без входу кнопка лишається, але називається «Відключити»
+      const o = el('button', 'ghost sm', (apiOn && a.auth) ? 'Вийти' : 'Відключити');
+      o.title = (apiOn && a.auth) ? 'Вийти з акаунта й відключити канал' : 'Відключити канал (збережений вхід, якщо був, буде забуто)';
+      o.onclick = () => post('/api/logout/' + p); br.append(o);
+    }
+    if (br.children.length) card.append(br);
+    let info = s && s.info ? s.info : '';
+    if (p === 'tiktok' && apiOn) info = info || 'TikTok не надає входу для читання чату';   // пояснює кнопку «Увійти», тож без неї підказки немає
+    if (info) card.append(el('div', 'info' + (s && s.state === 'error' ? ' err' : ''), info));
+    if (p === 'kick' && a && kickDiag) {   // кнопка є лише коли діагностику ввімкнено в розділі «Для розробників»
+      const rd = el('div', 'acc');
+      const bd = el('button', 'ghost sm', 'Діагностика Kick');
+      bd.title = 'Показати, які події реально приходять від Kick';
+      bd.onclick = () => window.open('/api/kick-debug', '_blank');
+      rd.append(bd); card.append(rd);
+    }
+    if (p === 'kick' && s && s.state === 'error') {
+      const r2 = el('div', 'acc');
+      if (appInfo.electron) {   // у програмі чат Kick читається через вбудований браузер: за потреби можна пройти перевірку Cloudflare вручну
+        const b = el('button', 'sm', 'Показати вікно Kick');
+        b.title = 'Відкрити вікно чату Kick, щоб пройти перевірку Cloudflare';
+        b.onclick = () => post('/api/kick-window');
+        r2.append(b);
+      } else inputRow(r2, 'Kick chatroom ID (вручну)', 'OK', v => post('/api/kick-chatroom', { id: v }));
+      card.append(r2);
+    }
+    box.append(card);
+  }
+}
+
+/* ---- ключі для кнопок «Увійти» ---- */
+const KEYS = [
+  { p: 'twitch', name: 'Twitch', url: 'https://dev.twitch.tv/console', idk: 'twitchClientId', sk: 'twitchClientSecret' },
+  { p: 'youtube', name: 'YouTube (Google)', url: 'https://console.cloud.google.com/apis/credentials', idk: 'googleClientId', sk: 'googleClientSecret' },
+  { p: 'kick', name: 'Kick', url: 'https://kick.com/settings/developer', idk: 'kickClientId', sk: 'kickClientSecret' },
+  { p: 'tiktok', name: 'TikTok (ключ Euler Stream, необов\'язково)', url: 'https://www.eulerstream.com', idk: 'eulerApiKey', sk: null,
+    note: 'Безкоштовний ключ збільшує ліміти сервера підписів TikTok. Допоможе, якщо з\'являється помилка підписання.' }
+];
+const shownKeys = new Set();   // які поля зараз показані (лише в пам'яті: після перезапуску всі приховані)
+function askConfirm(title, text, okLabel) {
+  return new Promise(resolve => {
+    const m = document.getElementById('confirmModal'), ok = document.getElementById('cfOk'), cancel = document.getElementById('cfCancel');
+    document.getElementById('cfTitle').textContent = title;
+    document.getElementById('cfText').textContent = text;
+    ok.textContent = okLabel || 'Так';
+    const onKey = e => { if (e.key === 'Escape') done(false); };
+    const done = v => { m.classList.remove('show'); ok.onclick = cancel.onclick = m.onclick = null; document.removeEventListener('keydown', onKey); resolve(v); };
+    document.addEventListener('keydown', onKey);
+    ok.onclick = () => done(true);
+    cancel.onclick = () => done(false);
+    m.onclick = e => { if (e.target === m) done(false); };
+    m.classList.add('show');
+    cancel.focus();   // безпечне значення за замовчуванням: «Скасувати»
+  });
+}
+/* ---- покрокова інструкція з отримання API-ключів (вікно з вкладками) ---- */
+const redirectUri = p => 'http://localhost:' + (location.port || '80') + '/auth/' + p + '/callback';   // саме таку адресу повернення надсилає сервер
+function rich(parent, s) {   // мінімальна розмітка: **жирний**, `код`, [текст](https://посилання); усе інше - звичайний текст (HTML не інтерпретується)
+  const re = /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+  let i = 0, m;
+  while ((m = re.exec(s))) {
+    if (m.index > i) parent.append(document.createTextNode(s.slice(i, m.index)));
+    if (m[1] !== undefined) parent.append(el('b', null, m[1]));
+    else if (m[2] !== undefined) parent.append(el('code', null, m[2]));
+    else { const a = el('a', 'lnk', m[3]); a.href = m[4]; a.target = '_blank'; a.rel = 'noopener noreferrer'; parent.append(a); }
+    i = re.lastIndex;
+  }
+  if (i < s.length) parent.append(document.createTextNode(s.slice(i)));
+  return parent;
+}
+async function copyText(text, btn) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; }
+  catch { try { const t = document.createElement('textarea'); t.value = text; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select(); ok = document.execCommand('copy'); t.remove(); } catch {} }
+  if (btn) { const old = btn.dataset.l || btn.textContent; btn.dataset.l = old; btn.textContent = ok ? '✓ Скопійовано' : 'Не вдалося'; clearTimeout(btn._t); btn._t = setTimeout(() => { btn.textContent = old; }, 1600); }
+  return ok;
+}
+function helpTabs() {
+  const R = p => redirectUri(p);
+  return [
+    { id: 'general', title: 'Загальне', blocks: [
+      ['h', 'Що справді потрібно'],
+      ['p', 'Не всім сервісам потрібні ключі. Ось що вони дають у MultiChat:'],
+      ['table', [['Сервіс', 'Чат без ключів', 'Для чого потрібні ключі й кнопка «Увійти»'],
+        ['YouTube', 'Так: впиши @handle або посилання на канал чи трансляцію (пошук трансляції без входу менш надійний)', 'Вхід через Google: програма надійно знаходить активну трансляцію через API, бачить нових підписників і офіційну кількість глядачів'],
+        ['Twitch', 'Так, чат читається за ніком каналу', 'Події: нові фоловери, нагороди за бали каналу, хайп-трейн, початок і кінець ефіру'],
+        ['Kick', 'Так, чат читається за ніком каналу', 'Лише щоб програма сама визначила твій нік після входу'],
+        ['TikTok', 'Так, за ніком, без входу', 'Офіційного входу немає. Є необов\'язковий ключ Euler Stream для стабільнішого підключення']]],
+      ['p', 'Якщо хочеш лише читати чат, ключі не потрібні: достатньо вписати нік (**Twitch, Kick, TikTok**) або @handle чи посилання на канал або трансляцію (**YouTube**). Ключі дають події та надійніше автопідключення YouTube. Найскладніше отримати їх саме для YouTube, тому його розписано найдокладніше (вкладка «YouTube»).'],
+      ['h', 'Адреси повернення (Redirect URI)'],
+      ['p', 'На сайті кожного сервісу треба вказати адресу, на яку сервіс поверне тебе після входу. Вона має збігатися з тією, яку очікує програма, символ у символ, без пробілів і без зайвого `/` в кінці. Натисни «Копіювати» і встав:'],
+      ['copy', 'Twitch', R('twitch')],
+      ['copy', 'YouTube (Google)', R('youtube')],
+      ['copy', 'Kick', R('kick')],
+      ['warn', 'Пиши саме `localhost`, а не `127.0.0.1`: Kick не приймає `127.0.0.1`. Якщо ти змінював порт програми, ці адреси вже містять твій порт, і саме їх треба вказувати на сайтах.'],
+      ['h', 'Куди вставляти ключі'],
+      ['ol', ['У програмі відкрий розділ «🔑 API-ключі». Якщо його не видно, ввімкни «Використовувати API-ключі для кнопок «Увійти»» в налаштуваннях «⚙️ Програма».', 'Встав Client ID і Client Secret потрібного сервісу.', 'Натисни «Зберегти ключі».', 'Якщо кнопка «Увійти» біля сервісу лишилась неактивною, перезапусти програму.']],
+      ['p', 'Ключі зберігаються у файлі `config.json` поруч із програмою. Кнопка з оком біля поля показує або ховає лише цей ключ.'],
+      ['h', 'Як вимкнути API-ключі'],
+      ['p', 'У налаштуваннях «⚙️ Програма», у блоці «API-ключі», зніми позначку «Використовувати API-ключі для кнопок «Увійти»». Усе, що пов\'язано з ключами (розділ «🔑 API-ключі», кнопки «Увійти», ця інструкція), сховається, а вхід через Google, Twitch і Kick та події, що від нього залежать, вимкнуться. Ключі й входи не видаляються: після ввімкнення все працює знову без повторного входу. Чат за ніком чи посиланням працює й без ключів.'],
+      ['h', 'Безпека'],
+      ['ul', ['Client Secret - це як пароль. Не показуй його на стрімі, не надсилай у чат і не публікуй у скріншотах.', 'Якщо секрет випадково побачили, створи новий на тому самому сайті: старий перестане працювати.', 'Програма ніколи не просить пароль від твоїх акаунтів. Вхід відбувається на сайті самого сервісу.']]
+    ] },
+    { id: 'youtube', title: 'YouTube', blocks: [
+      ['p', 'Це найскладніший сервіс, бо Google вимагає створити власний проєкт. Це безкоштовно, платіжна картка для YouTube Data API зазвичай не потрібна.'],
+      ['note', '**Ключі для YouTube не обов\'язкові.** Чат читається й без них: у картці YouTube впиши @handle або посилання на канал чи трансляцію. Ключі потрібні, щоб програма надійно знаходила активну трансляцію через API та бачила нових підписників.'],
+      ['note', '**Що знадобиться:** Google-акаунт, на якому є твій YouTube-канал. Саме ним ти входитимеш у програмі. Якщо в акаунта немає каналу, програма скаже, що YouTube-каналу немає.'],
+      ['h', 'Крок 1. Створи проєкт'],
+      ['ol', ['Відкрий [Google Cloud Console](https://console.cloud.google.com) і увійди тим Google-акаунтом, на якому твій канал.', 'Угорі натисни вибір проєкту, далі «New project» (Новий проєкт).', 'Назва: наприклад `MultiChat`. Натисни «Create» (Створити).', 'Переконайся, що вгорі вибрано саме цей проєкт.']],
+      ['h', 'Крок 2. Увімкни YouTube Data API v3'],
+      ['ol', ['У меню відкрий «APIs & Services», далі «Library» (Бібліотека).', 'У пошуку введи `YouTube Data API v3` і відкрий його.', 'Натисни «Enable» (Увімкнути).']],
+      ['h', 'Крок 3. Налаштуй екран згоди (Google Auth Platform)'],
+      ['ol', ['У меню відкрий «Google Auth Platform». Якщо бачиш кнопку «Get started», натисни її.', 'Application name (назва застосунку): `MultiChat`. User support email: твоя пошта. Далі.', 'Audience (аудиторія): обери **External** (зовнішній). Далі.', 'Contact information: твоя пошта. Далі.', 'Постав позначку, що погоджуєшся з політикою Google API Services User Data Policy, і натисни «Create».']],
+      ['h', 'Крок 4. Додай дозвіл на читання YouTube'],
+      ['ol', ['У Google Auth Platform відкрий «Data Access».', 'Натисни «Add or remove scopes».', 'Знайди й познач дозвіл (у списку це «View your YouTube account»). Якщо його не видно, встав цю адресу в поле «Manually add scopes»:', 'Натисни «Update», далі «Save».']],
+      ['copy', 'Дозвіл (scope)', 'https://www.googleapis.com/auth/youtube.readonly'],
+      ['p', 'Має бути саме `youtube.readonly`. Це єдиний дозвіл, який просить MultiChat, і він лише читає дані.'],
+      ['h', 'Крок 5. Додай себе в тестові користувачі'],
+      ['ol', ['Відкрий «Audience».', 'У блоці «Test users» натисни «Add users».', 'Впиши пошту того Google-акаунта, на якому твій канал. Натисни «Save».']],
+      ['p', 'Без цього кроку Google покаже «Access blocked» і не пустить тебе.'],
+      ['h', 'Крок 6. Створи ключі (OAuth client)'],
+      ['ol', ['У Google Auth Platform відкрий «Clients».', 'Натисни «Create client».', 'Application type: **Web application**.', 'Name: `MultiChat`.', '«Authorized JavaScript origins» залиш порожнім.', 'У «Authorized redirect URIs» натисни «+ Add URI» і встав адресу нижче.', 'Натисни «Create».', 'У вікні «OAuth client created» скопіюй **Client ID** і **Client secret**. Секрет скопіюй або завантаж JSON одразу. Якщо загубиш, створи новий секрет у налаштуваннях цього клієнта.']],
+      ['copy', 'Redirect URI', R('youtube')],
+      ['h', 'Крок 7. Встав ключі в програму'],
+      ['ol', ['Відкрий розділ «🔑 API-ключі». Якщо його не видно, ввімкни «Використовувати API-ключі для кнопок «Увійти»» в налаштуваннях «⚙️ Програма».', 'Встав Client ID і Client Secret у поля Google (YouTube).', 'Натисни «Зберегти ключі».']],
+      ['h', 'Крок 8. Увійди через Google'],
+      ['ol', ['У підблоці «Акаунти» біля YouTube натисни «Увійти».', 'Обери Google-акаунт з твоїм каналом.', 'Google покаже жовте попередження **«Google hasn\'t verified this app»** (Google не перевіряв цей застосунок). Для особистого застосунку це нормально. Натисни «Advanced» (Додатково), далі «Go to MultiChat (unsafe)».', 'Підтверди доступ на читання YouTube і натисни «Continue».', 'Програма поверне тебе на головну, і поруч із YouTube з\'явиться назва твого каналу.']],
+      ['h', 'Крок 9. Обов\'язково опублікуй застосунок (інакше вхід злітатиме кожні 7 днів)'],
+      ['p', 'Після створення застосунок має статус **Testing**. У цьому режимі токен входу діє лише 7 днів, тобто раз на тиждень доведеться заходити знову. Щоб цього не було:'],
+      ['ol', ['Відкрий «Google Auth Platform», далі «Audience».', 'Натисни «Publish app» і підтверди.', '**Після публікації ще раз натисни «Увійти» біля YouTube в програмі.** Токен, отриманий у режимі Testing, лишається тижневим, а новий уже буде довгим.']],
+      ['note', 'Перевірка від Google для особистого використання не потрібна. Застосунок для особистого користування (менш ніж 100 користувачів) може працювати без верифікації, просто щоразу при вході Google показує те жовте попередження, яке ти вже проходив у кроці 8.'],
+      ['h', 'Квота YouTube API'],
+      ['p', 'За замовчуванням Google дає 10 000 одиниць квоти на добу. Один виклик MultiChat коштує 1 одиницю (пошук активної трансляції, глядачі, підписники), тому для звичайного стріму цього зазвичай вистачає. Перевірити витрату можна в «APIs & Services», далі «YouTube Data API v3», далі «Quotas».'],
+      ['h', 'Якщо щось пішло не так'],
+      ['table', [['Повідомлення', 'Причина і що робити'],
+        ['`redirect_uri_mismatch`', 'Адреса в Google не збігається з тією, що очікує програма. Відкрий клієнта в «Clients» і перевір адресу з кроку 6 символ у символ, без `/` в кінці. Якщо змінював порт, зміни його й тут.'],
+        ['`Access blocked` або `access_denied`', 'Тебе немає в тестових користувачах (крок 5), або ти натиснув «Скасувати» на екрані згоди.'],
+        ['Через тиждень знову просить увійти, `invalid_grant`', 'Застосунок лишився в режимі Testing. Зроби крок 9 і увійди знову.'],
+        ['«У цього Google-акаунта немає YouTube-каналу»', 'Ти обрав не той акаунт. Увійди тим, на якому створено канал.'],
+        ['`Quota exceeded`', 'Вичерпано добову квоту. Вона оновлюється щодоби, до того часу програма не зможе звертатися до API.'],
+        ['`429` у консолі', 'Це інша історія: YouTube тимчасово обмежує кількість запитів з твоєї мережі. Закрий програму на 20-30 хвилин і запусти знову.']]]
+    ] },
+    { id: 'twitch', title: 'Twitch', blocks: [
+      ['p', 'Треба мати акаунт Twitch з увімкненою двофакторною автентифікацією (2FA). Без неї Twitch не дасть створити застосунок.'],
+      ['h', 'Крок 1. Увімкни 2FA'],
+      ['ol', ['Відкрий налаштування безпеки Twitch (Settings, далі Security and Privacy) і увімкни двофакторну автентифікацію.', 'Онови сторінку консолі розробника, щоб зміни підхопились.']],
+      ['h', 'Крок 2. Зареєструй застосунок'],
+      ['ol', ['Відкрий [консоль розробника Twitch](https://dev.twitch.tv/console) і увійди зі своїм акаунтом.', 'Зліва відкрий «Applications», далі «Register Your Application».', '**Name:** будь-яка унікальна назва, наприклад `MultiChat-твоїнік`.', '**OAuth Redirect URLs:** встав адресу нижче і натисни «Add».', '**Category:** обери будь-яку підходящу, наприклад «Website Integration».', '**Client Type:** обери **Confidential**.', 'Натисни «Create».']],
+      ['copy', 'Redirect URL', R('twitch')],
+      ['h', 'Крок 3. Скопіюй ключі'],
+      ['ol', ['У списку «Developer Applications» біля свого застосунку натисни «Manage».', 'Скопіюй **Client ID**.', 'Натисни «New Secret» і скопіюй **Client Secret**. Він показується один раз. Новий секрет робить старий недійсним.']],
+      ['h', 'Крок 4. Встав у програму й увійди'],
+      ['ol', ['Встав обидва значення в розділі «🔑 API-ключі» (вкладка «Загальне», розділ «Куди вставляти ключі») і збережи.', 'У «Акаунтах» біля Twitch натисни «Увійти».', 'Twitch покаже, які дозволи просить застосунок: читання чату, фоловерів, нагород за бали каналу, хайп-трейну. Натисни «Authorize».']],
+      ['p', 'Після входу програма отримуватиме події: нові фоловери, нагороди за бали, хайп-трейн, початок і кінець ефіру.'],
+      ['note', '**Типова помилка:** якщо Twitch пише про невідповідність адреси повернення, відкрий «Manage» біля застосунку й перевір поле «OAuth Redirect URLs»: там має бути рівно адреса з кроку 2.']
+    ] },
+    { id: 'kick', title: 'Kick', blocks: [
+      ['p', 'На Kick чат читається за ніком і без ключів. Ключі потрібні лише для того, щоб після входу програма сама визначила твій нік.'],
+      ['h', 'Крок 1. Увімкни 2FA'],
+      ['p', 'Kick не відкриває розділ розробника без двофакторної автентифікації. Увімкни її в [налаштуваннях безпеки](https://kick.com/settings/security).'],
+      ['h', 'Крок 2. Створи застосунок'],
+      ['ol', ['Відкрий [kick.com/settings/developer](https://kick.com/settings/developer) (в акаунті це вкладка «Developer»).', 'Натисни створення нового застосунку.', 'Заповни назву й короткий опис (наприклад, `MultiChat` і «Чат зі стріму»).', '**Redirect URL:** встав адресу нижче. Саме `localhost`, а `127.0.0.1` Kick не приймає.', 'Створи застосунок.']],
+      ['copy', 'Redirect URL', R('kick')],
+      ['h', 'Крок 3. Скопіюй ключі'],
+      ['p', 'Після створення Kick покаже **Client ID** і **Client Secret**. Скопіюй обидва.'],
+      ['h', 'Крок 4. Встав у програму й увійди'],
+      ['ol', ['Збережи ключі в розділі «🔑 API-ключі» MultiChat.', 'У «Акаунтах» біля Kick натисни «Увійти» і підтверди доступ (програма просить лише читання профілю й каналу).', 'Програма визначить твій нік на Kick.']],
+      ['p', 'Якщо входити не хочеш, просто впиши нік каналу в програмі, чат працюватиме так само.']
+    ] },
+    { id: 'tiktok', title: 'TikTok', blocks: [
+      ['p', 'У TikTok **немає офіційного API для чату прямих ефірів** для звичайних користувачів. MultiChat читає чат за ніком через неофіційну бібліотеку, яка підключається до внутрішньої служби TikTok LIVE. Тому:'],
+      ['ul', ['Вхід через кнопку «Увійти» для TikTok недоступний, а пароль TikTok нікуди вводити не треба.', 'Достатньо вписати нік у програмі (без символу `@`), і коли ти в ефірі, програма підключиться.', 'Підключення неофіційне, тож TikTok може змінити щось на своєму боці, і тоді чат перестане читатися, доки бібліотеку не оновлять.']],
+      ['h', 'Необов\'язковий ключ Euler Stream'],
+      ['p', 'Для підключення потрібен сервер підписів. Без ключа використовується безкоштовний режим, але він сильно обмежений за кількістю запитів. Якщо в програмі з\'являється повідомлення про недоступний сервер підписів або перевищений ліміт, додай безкоштовний ключ:'],
+      ['ol', ['Зареєструйся на [eulerstream.com](https://www.eulerstream.com).', 'Відкрий свій кабінет (Dashboard), розділ «API Keys» і створи ключ («Create»).', 'Скопіюй ключ.', 'У MultiChat відкрий розділ «🔑 API-ключі», встав ключ у поле Euler Stream і натисни «Зберегти ключі».', 'Програма сама перепідключить TikTok.']],
+      ['p', 'Назви кнопок на сайті Euler Stream можуть відрізнятися, суть та сама: зареєструватися й створити ключ API.']
+    ] },
+    { id: 'check', title: 'Чек-лист', blocks: [
+      ['p', 'Познач, що вже зроблено (позначки не зберігаються, це лише для зручності):'],
+      ['check', ['Програма відкривається за адресою `http://localhost:' + (location.port || '80') + '`.', 'Twitch: 2FA увімкнено, застосунок типу Confidential, адреса повернення вказана.', 'Kick: 2FA увімкнено, адреса повернення з `localhost`.', 'YouTube: проєкт створено, API увімкнено, дозвіл `youtube.readonly` доданий, ти в тестових користувачах, клієнт типу Web application, застосунок **опубліковано**.', 'Ключі вставлено й збережено, біля кожного сервісу кнопка «Увійти» активна.', 'Після входу біля сервісу видно твоє ім\'я або назву каналу.']],
+      ['h', 'Джерела'],
+      ['ul', ['Twitch: [реєстрація застосунку](https://dev.twitch.tv/docs/authentication/register-app)', 'Kick: [налаштування застосунку](https://github.com/KickEngineering/KickDevDocs/blob/main/getting-started/kick-apps-setup.md) і [kick.com/settings/developer](https://kick.com/settings/developer)', 'Google: [публікація й верифікація застосунків](https://support.google.com/cloud/answer/13464323)', 'Токени в режимі Testing і публікація застосунку: [документація Nango](https://nango.dev/docs/integrations/all/youtube)', 'TikTok: [TikTok Live Connector](https://github.com/zerodytrash/TikTok-Live-Connector) (неофіційна бібліотека)']],
+      ['p', 'Кроки звірено з документацією сервісів станом на жовтень 2026. Інтерфейс сайтів інколи змінюється, тож назви кнопок можуть трохи відрізнятися, але порядок дій лишається тим самим.']
+    ] }
+  ];
+}
+let helpOpener = null, helpCur = 'general';
+function renderHelp(id) {
+  const tabs = helpTabs(); const t = tabs.find(x => x.id === id) || tabs[0];
+  helpCur = t.id;
+  const bar = document.getElementById('helpTabs'), body = document.getElementById('helpBody');
+  bar.textContent = '';
+  tabs.forEach(x => {
+    const b = el('button', null, x.title); b.type = 'button'; b.id = 'htab-' + x.id; b.dataset.tab = x.id;
+    b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(x.id === t.id)); b.setAttribute('aria-controls', 'helpBody'); b.tabIndex = x.id === t.id ? 0 : -1;
+    b.onclick = () => renderHelp(x.id);
+    b.onkeydown = e => {
+      const i = tabs.findIndex(y => y.id === x.id); let n = -1;
+      if (e.key === 'ArrowRight') n = (i + 1) % tabs.length; else if (e.key === 'ArrowLeft') n = (i - 1 + tabs.length) % tabs.length; else if (e.key === 'Home') n = 0; else if (e.key === 'End') n = tabs.length - 1;
+      if (n >= 0) { e.preventDefault(); renderHelp(tabs[n].id); document.getElementById('htab-' + tabs[n].id).focus(); }
+    };
+    bar.append(b);
+  });
+  body.setAttribute('aria-labelledby', 'htab-' + t.id);
+  body.textContent = ''; body.scrollTop = 0;
+  for (const [kind, a, b2] of t.blocks) {
+    if (kind === 'h') body.append(el('h4', null, a));
+    else if (kind === 'p') body.append(rich(el('p'), a));
+    else if (kind === 'note' || kind === 'warn') body.append(rich(el('div', kind === 'warn' ? 'hwarn' : 'hnote'), (kind === 'warn' ? '⚠️ ' : 'ℹ️ ') + a));
+    else if (kind === 'ol' || kind === 'ul') { const l = el(kind); a.forEach(s => l.append(rich(el('li'), s))); body.append(l); }
+    else if (kind === 'copy') {
+      const row = el('div', 'hcopy'); const c = el('code', null, b2); const btn = el('button', 'sm', 'Копіювати'); btn.type = 'button';
+      btn.setAttribute('aria-label', 'Копіювати: ' + a); btn.onclick = () => copyText(b2, btn);
+      row.append(el('span', 'lbl', a), c, btn); body.append(row);
+    }
+    else if (kind === 'table') {
+      const tb = el('table'); a.forEach((r, ri) => { const tr = el('tr'); r.forEach(cell => tr.append(rich(el(ri ? 'td' : 'th'), cell))); tb.append(tr); }); body.append(tb);
+    }
+    else if (kind === 'check') {
+      const l = el('ul', 'hchk'); a.forEach(s => { const li = el('li'); const lab = el('label'); const cb = el('input'); cb.type = 'checkbox'; const sp = rich(el('span'), s); lab.append(cb, sp); li.append(lab); l.append(li); }); body.append(l);
+    }
+  }
+}
+function helpKey(e) { if (e.key === 'Escape') closeHelp(); }
+function openHelp(id) {
+  if (!apiOn) return;   // інструкція про ключі недоступна, поки використання API-ключів вимкнено
+  const m = document.getElementById('helpModal');
+  helpOpener = document.activeElement;
+  renderHelp(id || 'general');
+  m.classList.add('show');
+  document.addEventListener('keydown', helpKey);
+  m.onclick = e => { if (e.target === m) closeHelp(); };
+  document.getElementById('helpClose').onclick = closeHelp;
+  document.getElementById('helpClose').focus();
+}
+function closeHelp() {
+  const m = document.getElementById('helpModal');
+  m.classList.remove('show'); m.onclick = null;
+  document.removeEventListener('keydown', helpKey);
+  if (helpOpener && helpOpener.focus && document.contains(helpOpener)) helpOpener.focus();
+  helpOpener = null;
+}
+document.getElementById('helpOpen').onclick = () => openHelp('general');
+function renderKeys() {
+  const box = document.getElementById('keys');
+  if (!apiOn) { box.textContent = ''; return; }   // вимкнено: полів ключів у сторінці немає зовсім
+  if (box.contains(document.activeElement)) return;
+  box.innerHTML = '';
+  for (const k of KEYS) {
+    const saved = k.p === 'tiktok' ? acc.configured.euler : acc.configured[k.p];
+    const w = el('div', 'kblk'); w.dataset.p = k.p;
+    const t = el('div'); t.append(el('b', null, k.name), ' ');
+    const l = el('a', 'lnk', k.sk ? 'створити застосунок' : 'отримати ключ'); l.href = k.url; l.target = '_blank'; l.rel = 'noopener'; t.append(l);
+    const hl = el('a', 'lnk', 'інструкція'); hl.href = '#'; hl.dataset.help = k.p; hl.onclick = e => { e.preventDefault(); openHelp(k.p); };   // відкриває вкладку цього сервісу
+    t.append(' · ', hl);
+    const inf = el('div', 'info', k.sk ? 'Redirect URI: ' + redirectUri(k.p) : k.note);
+    if (k.sk) { const cp = el('a', 'lnk', ' копіювати'); cp.href = '#'; cp.onclick = e => { e.preventDefault(); copyText(redirectUri(k.p), cp); }; inf.append(cp); }
+    w.append(t, inf);
+    const mk = (key, ph) => {
+      const row = el('div', 'krow');
+      const i = el('input');
+      i.type = shownKeys.has(key) ? 'text' : 'password';   // за замовчуванням усі ключі приховані
+      i.dataset.key = key; i.autocomplete = 'new-password'; i.spellcheck = false;
+      i.placeholder = ph + (saved ? ' (збережено)' : '');
+      i.value = cfg.keys[key] || '';   // введене значення лишається в полі після збереження й входу
+      i.addEventListener('input', () => { cfg.keys[key] = i.value; save(); });
+      const eye = el('button', 'eye', '👁'); eye.type = 'button';
+      const paint = () => {
+        const on = i.type === 'text';
+        eye.classList.toggle('on', on);
+        eye.setAttribute('aria-pressed', String(on));
+        const t = on ? 'Приховати ключ' : 'Показати ключ';
+        eye.title = t; eye.setAttribute('aria-label', t);
+      };
+      eye.onclick = () => {   // керує лише цим полем; значення не змінюється
+        if (i.type === 'password') { i.type = 'text'; shownKeys.add(key); } else { i.type = 'password'; shownKeys.delete(key); }
+        paint();
+      };
+      paint();
+      row.append(i, eye);
+      return row;
+    };
+    w.append(mk(k.idk, k.sk ? 'Client ID' : 'API key'));
+    if (k.sk) w.append(mk(k.sk, 'Client Secret'));
+    box.append(w);
+  }
+}
+document.getElementById('keysSave').onclick = async () => {
+  if (!apiOn) return;
+  const body = {};
+  document.querySelectorAll('#keys input[data-key]').forEach(i => { if (i.value.trim()) body[i.dataset.key] = i.value.trim(); });
+  if (!Object.keys(body).length) { addSys('Спершу введи ключі.', true); return; }
+  const r = await post('/api/config', body);
+  // поля не очищаємо: користувач бачить введене й може відредагувати без повторного введення
+  addSys(r.ok ? 'Ключі збережено. Поля лишаються заповненими, їх можна редагувати. Кнопки «Увійти» активні.' : 'Не вдалося зберегти ключі.', !r.ok);
+};
+document.getElementById('keysClear').onclick = async () => {
+  if (!apiOn) return;
+  const yes = await askConfirm('Очистити API-ключі?',
+    'Усі введені та збережені ключі (Twitch, Google, Kick, Euler Stream) буде видалено. Входи, що працюють через ці ключі, відключаться, а чат за нікнеймами працюватиме далі. Цю дію не можна скасувати.', 'Очистити');
+  if (!yes) return;
+  const r = await post('/api/config/clear');
+  if (!r.ok) { addSys('Не вдалося очистити ключі.', true); return; }
+  cfg.keys = {}; save(); shownKeys.clear();   // старі значення більше не відновлюються
+  document.querySelectorAll('#keys input').forEach(i => { i.value = ''; });
+  renderKeys();
+  addSys('API-ключі очищено. Підключення, що їх використовували, перезапущено без ключів.');
+};
+
+/* ---- статус, LIVE, глядачі ---- */
+const STATE_LABEL = { off: 'не підключено', connecting: 'підключення...', ok: 'підключено до чату', waiting: 'очікування стріму', error: 'помилка' };
+function tip(p) {
+  if (!net.online) return `${PL[p]}: немає інтернет-з'єднання, стан платформи невідомий`;
+  const s = st[p] || {};
+  let t = `${PL[p]}: ${s.live === true ? 'Онлайн (стрім у ефірі)' : 'Офлайн (стріму немає)'}; чат: ${STATE_LABEL[s.state] || 'не підключено'}`;
+  if (s.info) t += ', ' + s.info;
+  return t + '. Клік - показати або сховати повідомлення платформи';
+}
+// значок платформи: «Немає мережі» при втраті інтернету (це не збій платформи), інакше «Онлайн/Офлайн» за станом стріму
+function refreshChip(p) {
+  const chip = document.querySelector(`.chip[data-p="${p}"]`);
+  if (!chip) return;
+  const live = !!(st[p] && st[p].live === true) && net.online;
+  chip.classList.toggle('nonet', !net.online);
+  chip.dataset.live = String(live);
+  chip.querySelector('.cs').textContent = !net.online ? 'Немає мережі' : (live ? 'Онлайн' : 'Офлайн');
+  chip.querySelector('.lv').className = 'lv' + (live ? ' on' : '');
+  chip.title = tip(p);
+}
+function setStatus(m) {
+  const chip = document.querySelector(`.chip[data-p="${m.platform}"]`);
+  if (!chip) return;
+  const lastErr = st[m.platform] && st[m.platform].lastErr;
+  chip.dataset.state = m.state;
+  st[m.platform] = { ...(st[m.platform] || {}), ...m };
+  chip.title = tip(m.platform);
+  const sp = st[m.platform];
+  // поки немає інтернету, повідомлення про платформи не показуємо: це наслідок втрати мережі, а не збій платформи
+  if (net.online && (m.state === 'ok' || m.state === 'waiting')) {
+    if (sp.announced !== m.state) {
+      addSys(m.state === 'ok' ? `✅ ${PL[m.platform]}: підключено до чату${m.info ? ' (' + m.info + ')' : ''}` : `⏳ ${PL[m.platform]}: ${m.info || 'очікування початку стріму'}`);
+      sp.announced = m.state;
+    }
+  } else if (m.state === 'off' || m.state === 'error') sp.announced = null;
+  if (m.state === 'error' && net.online && m.info !== lastErr) { addSys(`${PL[m.platform]}: ${m.info}`, true); sp.lastErr = m.info; }
+  else if (m.state === 'ok') sp.lastErr = null;
+  renderAccounts(); renderViewers();
+}
+function setLive(m) {
+  const chip = document.querySelector(`.chip[data-p="${m.platform}"]`);
+  if (!chip) return;
+  const prev = st[m.platform] && st[m.platform].live;
+  st[m.platform] = { ...(st[m.platform] || {}), live: m.live };
+  refreshChip(m.platform);
+  if (net.online && prev !== m.live && m.live !== null) addSys(m.live ? `🔴 ${PL[m.platform]}: трансляція в ефірі` : `⚫ ${PL[m.platform]}: трансляція не в ефірі`);
+}
+const vw = {};
+function renderViewers() {
+  const box = document.getElementById('vlist');   // показники навантаження (#sysm) лежать поруч і не перемальовуються
+  box.innerHTML = '';
+  let total = 0;
+  for (const p in PL) {
+    const n = Number(vw[p]) || 0;
+    total += n;
+    const d = el('span', 'vc' + (net.online && st[p] && st[p].state === 'ok' ? '' : ' off'));
+    d.title = `${PL[p]}: глядачів ${n}`;
+    d.append(icon(p), el('b', null, String(n)));
+    box.append(d);
+  }
+  const t = el('span', 'vt', String(total)); t.title = 'Усього глядачів на всіх платформах';
+  box.append(el('span', 'vsep', '|'), t);
+}
+function onViewers(m) { vw[m.platform] = m.count; renderViewers(); }
+Object.keys(PL).forEach(p => { document.querySelector(`.chip[data-p="${p}"]`).title = tip(p); });
+
+/* ---- сповіщення про втрату інтернету: вікно (лише в застосунку), банер (також в OBS), один звуковий сигнал ---- */
+let netHideTimer = null, lastBeepOutage = 0, audioCtx = null;
+// 15 вбудованих сигналів (синтезуються, не потребують файлів чи інтернету). Крок: [частота, кінцева частота або 0, початок с, тривалість с, форма хвилі, гучність 0..1]
+const NET_SOUNDS = [
+  { id: 'quiet-soft',  cat: 'Тихі та короткі', name: 'Тихий сигнал',           s: [[600, 0, 0, 0.22, 'sine', 0.45]] },
+  { id: 'quiet-bell',  cat: 'Тихі та короткі', name: 'Короткий дзвінок',       s: [[1320, 0, 0, 0.4, 'sine', 0.5], [1980, 0, 0, 0.28, 'sine', 0.22]] },
+  { id: 'quiet-hint',  cat: 'Тихі та короткі', name: 'Ледь помітне сповіщення', s: [[520, 0, 0, 0.13, 'sine', 0.3], [690, 0, 0.11, 0.15, 'sine', 0.3]] },
+  { id: 'std-notify',  cat: 'Стандартні',      name: 'Сигнал повідомлення',    s: [[880, 0, 0, 0.2, 'sine', 0.8], [660, 0, 0.22, 0.2, 'sine', 0.8]] },
+  { id: 'std-double',  cat: 'Стандартні',      name: 'Подвійний сигнал',       s: [[740, 0, 0, 0.16, 'triangle', 0.85], [740, 0, 0.26, 0.16, 'triangle', 0.85]] },
+  { id: 'std-warn',    cat: 'Стандартні',      name: 'Стандартне попередження', s: [[520, 780, 0, 0.55, 'triangle', 0.85]] },
+  { id: 'loud-error',  cat: 'Гучні',           name: 'Виразний сигнал помилки', s: [[200, 0, 0, 0.3, 'square', 0.9], [200, 0, 0.38, 0.3, 'square', 0.9]] },
+  { id: 'loud-ring',   cat: 'Гучні',           name: 'Гучний дзвінок',         s: [0, 1, 2, 3, 4, 5].map(i => [i % 2 ? 1250 : 1000, 0, i * 0.13, 0.11, 'sine', 1]) },
+  { id: 'loud-alarm',  cat: 'Гучні',           name: 'Різкий сигнал попередження', s: [0, 1, 2].map(i => [900, 600, i * 0.3, 0.26, 'sawtooth', 0.7]) },
+  { id: 'long-tone',   cat: 'Довгі',           name: 'Протяжний сигнал',       s: [[500, 0, 0, 1.6, 'sine', 0.85]] },
+  { id: 'long-system', cat: 'Довгі',           name: 'Довге системне сповіщення', s: [[523, 0, 0, 0.5, 'sine', 0.8], [659, 0, 0.5, 0.5, 'sine', 0.8], [784, 0, 1, 0.9, 'sine', 0.8]] },
+  { id: 'long-siren',  cat: 'Довгі',           name: 'Сигнал тривоги',         s: [[600, 1000, 0, 0.6, 'sawtooth', 0.6], [1000, 600, 0.6, 0.6, 'sawtooth', 0.6], [600, 1000, 1.2, 0.6, 'sawtooth', 0.6], [1000, 600, 1.8, 0.6, 'sawtooth', 0.6]] },
+  { id: 'combo-four',  cat: 'Комбіновані',     name: 'Кілька коротких сигналів', s: [0, 1, 2, 3].map(i => [880, 0, i * 0.2, 0.1, 'sine', 0.8]) },
+  { id: 'combo-23',    cat: 'Комбіновані',     name: 'Подвійний і потрійний',  s: [[740, 0, 0, 0.12, 'triangle', 0.85], [740, 0, 0.2, 0.12, 'triangle', 0.85], [988, 0, 0.7, 0.12, 'triangle', 0.85], [988, 0, 0.9, 0.12, 'triangle', 0.85], [988, 0, 1.1, 0.12, 'triangle', 0.85]] },
+  { id: 'combo-seq',   cat: 'Комбіновані',     name: 'Послідовність звуків',   s: [523, 659, 784, 1047, 784, 659].map((f, i) => [f, 0, i * 0.16, 0.14, 'sine', 0.8]) }
+];
+const NET_DEFAULT_SOUND = 'std-notify';   // «стандартний короткий сигнал»: його ж використовуємо, якщо вибраного звуку не існує
+const netSoundById = id => NET_SOUNDS.find(x => x.id === id) || NET_SOUNDS.find(x => x.id === NET_DEFAULT_SOUND);
+const netSoundDur = x => Math.max(...x.s.map(st => st[2] + st[3]));
+function playNetSound(id, volume) {   // окремий аудіоконтекст-генератор: не блокує застосунок і не перериває озвучення чату
+  try {
+    const C = window.AudioContext || window.webkitAudioContext;
+    audioCtx = audioCtx || new C();
+    const ctx = audioCtx, snd = netSoundById(id), master = 0.55 * Math.max(0, Math.min(1, Number(volume)));
+    if (master <= 0) return;
+    const play = () => {
+      const t0 = ctx.currentTime + 0.02;
+      snd.s.forEach(([f, f2, at, dur, wave, g]) => {
+        const o = ctx.createOscillator(), gn = ctx.createGain(), peak = Math.max(0.0002, master * g), st = t0 + at, en = st + dur;
+        o.type = wave; o.frequency.setValueAtTime(f, st);
+        if (f2) o.frequency.linearRampToValueAtTime(f2, en);
+        gn.gain.setValueAtTime(0.0001, st);
+        gn.gain.exponentialRampToValueAtTime(peak, st + Math.min(0.02, dur / 3));
+        gn.gain.setValueAtTime(peak, Math.max(st + 0.02, en - Math.min(0.12, dur / 2)));
+        gn.gain.exponentialRampToValueAtTime(0.0001, en);
+        o.connect(gn); gn.connect(ctx.destination); o.start(st); o.stop(en + 0.02);
+      });
+    };
+    if (ctx.state === 'suspended') ctx.resume().then(play).catch(() => {}); else play();
+  } catch {}
+}
+let netRepeatTimer = null;
+const netVol = () => { const p = Number(cfg.net.volumePct); return Number.isFinite(p) ? Math.min(100, Math.max(0, p)) / 100 : 0.7; };   // частка 0..1 для генератора звуку
+const playNetAlert = () => { if (cfg.net.on) playNetSound(cfg.net.sound, netVol()); };
+function syncNetSound() {   // повтор лише поки інтернету немає, лише у вікні програми (не в OBS) і лише в одному вікні
+  clearInterval(netRepeatTimer); netRepeatTimer = null;
+  if (net.online || DOCK || !isSpeaker || net.dismissed) return;
+  if (cfg.net.on && cfg.net.repeat) netRepeatTimer = setInterval(playNetAlert, Math.max(2, Number(cfg.net.every) || 5) * 1000);
+}
+function renderNet() {
+  clearTimeout(netHideTimer);
+  const bar = document.getElementById('netbar');
+  if (!net.online) {   // стани 1-2: втрачено / очікування відновлення (одне й те саме повідомлення, без повторів)
+    bar.className = 'lost';
+    bar.innerHTML = "<b>⚠️ Втрачено з'єднання з інтернетом!</b>Застосунок намагається автоматично відновити підключення.";
+  } else if (net.restoredAt && Date.now() - net.restoredAt < NET_BACK_MS) {   // стан 3: відновлено, потім банер зникає
+    bar.className = 'back';
+    bar.innerHTML = "<b>✅ Інтернет-з'єднання відновлено!</b>";
+    netHideTimer = setTimeout(renderNet, NET_BACK_MS - (Date.now() - net.restoredAt) + 30);
+  } else { bar.className = ''; bar.innerHTML = ''; }
+  document.getElementById('netModal').classList.toggle('show', !DOCK && !net.online && !net.dismissed);
+  document.getElementById('netMute').style.display = (cfg.net.on && netVol() > 0) ? 'none' : 'block';
+  Object.keys(PL).forEach(refreshChip);
+  renderViewers();
+}
+function onNet(m) {
+  net = { online: !!m.online, outage: m.outage || 0, dismissed: !!m.dismissed, restoredAt: m.restoredAt || 0 };
+  // стан 4: нова втрата після відновлення дає нове вікно і новий сигнал; а в межах однієї втрати сигнал лише один
+  if (!net.online && net.outage !== lastBeepOutage && !DOCK && isSpeaker) { lastBeepOutage = net.outage; playNetAlert(); }
+  syncNetSound();
+  renderNet();
+}
+document.getElementById('netOk').onclick = () => {   // «Добре» закриває вікно в усіх вікнах; моніторинг триває
+  if (!wsSend({ type: 'netAck' })) { net.dismissed = true; renderNet(); }
+};
+
+/* ---- виняток озвучки: список глядачів ---- */
+const parseMuted = s => new Set(String(s || '').split(/[\n,;]+/).map(x => x.trim().replace(/^@/, '').toLowerCase()).filter(Boolean));
+const isMuted = u => parseMuted(cfg.tts.muted).has(String(u || '').trim().replace(/^@/, '').toLowerCase());
+function addMuted(u, fromNet) {   // fromNet: заглушено в іншому вікні (напр. у панелі OBS)
+  u = String(u || '').trim();
+  if (!u || u === '???' || isMuted(u)) return;
+  const t = cfg.tts;
+  t.muted = (t.muted.trim() ? t.muted.replace(/[\s,;]*$/, '') + ', ' : '') + u;
+  save();
+  const ta = document.querySelector('[data-k="tts.muted"]'); if (ta) ta.value = t.muted;
+  addSys(DOCK ? `🔇 ${u}: більше не озвучується`
+              : `🔇 ${u}: повідомлення більше не озвучуються${fromNet ? ' (заглушено в панелі OBS)' : ''} (список у блоці «Озвучка»)`);
+}
+// клік по іконці: заглушуємо тут і повідомляємо інші вікна (панель OBS - окремий браузер зі своїм сховищем, а список зберігає вікно програми)
+function muteViewer(u) { addMuted(u); wsSend({ type: 'mute', user: String(u || '') }); }
+
+/* ---- відображення повідомлень ---- */
+function hue(s) { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; }
+function addSys(text, err) {
+  feed.appendChild(el('div', 'sys' + (err ? ' err' : ''), text));
+  afterAppend();
+}
+function addMsg(m) {
+  const d = el('div', 'msg p-' + m.platform);
+  const pi = icon(m.platform, 'pi'); pi.title = PL[m.platform];
+  const u = el('span', 'user', m.user);
+  u.style.color = `hsl(${hue(m.user)},70%,70%)`;
+  const mu = el('span', 'mute', '🔇'); mu.title = 'Не озвучувати цього глядача'; mu.onclick = () => muteViewer(m.user);
+  d.append(pi, u, el('span', 'text', m.text), mu);
+  feed.appendChild(d);
+  afterAppend();
+}
+const ICON = { gift: '🎁', sub: '⭐', follow: '💜', raid: '🚀', bits: '💎', points: '🏆', hype: '🔥', share: '🔗' };
+function addEvent(m) {
+  if (!cfg.events || cfg.ev[m.kind] === false) return;
+  const d = el('div', 'msg evt k-' + m.kind + ' p-' + m.platform);
+  const pi = icon(m.platform, 'pi'); pi.title = PL[m.platform];
+  const u = el('span', 'user', m.user);
+  u.style.color = `hsl(${hue(m.user)},70%,75%)`;
+  d.append(pi, el('span', 'ico', ICON[m.kind] || '✨'), u, el('span', 'text', m.text));
+  feed.appendChild(d);
+  afterAppend();
+}
+
+/* ---- озвучка ---- */
+const q = []; let busy = false;
+let isSpeaker = true;   // озвучує лише одне вікно (вирішує сервер)
+const MENTION_RE = /@[\p{L}\p{N}_.\-]*/gu;
+const LEAD_MENTIONS_RE = /^(?:\s*@[\p{L}\p{N}_.\-]+[\s,:;]*)+/u;
+// прибирає з тексту все, що не варто озвучувати: згадування @нік, посилання, емодзі й службові символи
+function sanitize(s, o) {
+  if (o.skipMentions) s = s.replace(MENTION_RE, ' ');
+  if (o.skipLinks) s = s.replace(/https?:\/\/\S+|www\.\S+/gi, ' ');
+  if (o.cleanSymbols) {
+    s = s.replace(/[\uFE00-\uFE0F\u200B-\u200D\u2060]/g, '');
+    s = s.replace(/[^\p{L}\p{N}\p{M}\s.,!?:;'’ʼ«»"()\-–]/gu, ' ');
+  }
+  return s.replace(/\s+([,.!?;:])/g, '$1')
+          .replace(/([,;:])(\s*[,;:])+/g, '$1')
+          .replace(/([!?.])\1+/g, '$1')
+          .replace(/^[\s,.:;!?\-–]+/, '')
+          .replace(/(.)\1{3,}/gu, '$1$1$1')
+          .replace(/\s+/g, ' ').trim();
+}
+const speakName = u => {
+  const n = String(u || '').replace(/[_.\-]+/g, ' ').replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, ' ').trim();
+  return n || String(u || '');
+};
+const recent = new Map();
+function isDup(key, ms) {
+  const now = Date.now();
+  for (const [k, ts] of recent) if (now - ts > 6000) recent.delete(k);
+  const prev = recent.get(key);
+  recent.set(key, now);
+  return prev !== undefined && now - prev < (ms || 6000);
+}
+function clean(m) {
+  const t = cfg.tts;
+  if (!ttsEnabled() || !t.pl[m.platform] || isMuted(m.user)) return null;
+  let s = (m.text || '').trim();
+  const head = s.replace(LEAD_MENTIONS_RE, '').trim();   // команда після згадування, напр. "@bot !help"
+  if (t.prefix) {
+    if (!head.toLowerCase().startsWith(t.prefix.toLowerCase())) return null;
+    s = head.slice(t.prefix.length).trim();
+  } else if (t.ignoreCmd && head.startsWith('!')) return null;
+  s = sanitize(s, t);
+  if (!/[\p{L}\p{N}]/u.test(s)) return null;
+  const bl = t.blocked.split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+  if (bl.some(w => s.toLowerCase().includes(w))) return null;
+  if (s.length > t.maxLen) s = s.slice(0, t.maxLen);
+  return t.readName ? `${speakName(m.user)}: ${s}` : s;
+}
+function speakEvent(m) {
+  const t = cfg.tts;
+  if (!eventSpeechEnabled() || !cfg.evv[m.kind] || !t.pl[m.platform] || isMuted(m.user)) return;
+  let s = `${speakName(m.user)}: ${sanitize(m.text, { skipMentions: true, skipLinks: true, cleanSymbols: true })}`.replace(/\s+/g, ' ').trim();
+  if (s.length > t.maxLen) s = s.slice(0, t.maxLen);
+  if (!isDup('ev|' + m.platform + '|' + m.kind + '|' + s, 1500)) enqueue(s);
+}
+function enqueue(text, force) {
+  if (!force && !isSpeaker) return;
+  const max = Math.max(1, cfg.tts.maxQueue | 0);
+  while (q.length >= max) q.shift();
+  q.push(text); pump();
+}
+let curAudio = null, lastFail = '';
+// гучність голосу бота: частка 0..1 для audio/utterance (гучність самого застосунку, системний мікшер Windows не чіпаємо)
+const ttsVol = () => { const p = Number(cfg.tts.volumePct); return Number.isFinite(p) ? Math.min(100, Math.max(0, p)) / 100 : 1; };
+function speakBrowser(text, done, voiceURI) {
+  const u = new SpeechSynthesisUtterance(text);
+  const v = speechSynthesis.getVoices().find(v => v.voiceURI === voiceURI);
+  u.lang = v ? v.lang : 'uk-UA';   // підказка движку: українська, а не англійська за замовчуванням
+  if (v) u.voice = v;
+  u.rate = cfg.tts.rate; u.pitch = cfg.tts.pitch; u.volume = ttsVol();
+  u.onend = done; u.onerror = done;
+  speechSynthesis.speak(u);
+}
+// серверні голоси: спершу завантажуємо звук, щоб побачити справжню причину, якщо голос не спрацював
+function speakServer(text, voice, done) {
+  const cur = { audio: null, done };
+  curAudio = cur;
+  const failTo = reason => {
+    if (curAudio !== cur) return;
+    curAudio = null;
+    const uk = speechSynthesis.getVoices().find(x => /^uk/i.test(x.lang));
+    if (reason !== lastFail) { lastFail = reason; addSys(`Голос не спрацював: ${reason}. ${uk ? 'Читаю системним українським голосом.' : 'Українського системного голосу немає, повідомлення пропущено.'}`, true); }
+    if (uk) speakBrowser(text, done, uk.voiceURI); else done();   // англійським голосом кирилицю не читаємо
+  };
+  fetch('/api/tts?' + new URLSearchParams({ text, voice, rate: cfg.tts.rate }))
+    .then(async r => {
+      if (curAudio !== cur) return;
+      if (!r.ok) return failTo(((await r.text().catch(() => '')) || 'HTTP ' + r.status).slice(0, 300));
+      const blob = await r.blob();
+      if (curAudio !== cur) return;
+      const url = URL.createObjectURL(blob);
+      const a = new Audio(url);
+      cur.audio = a;
+      a.volume = ttsVol();
+      if (voice.startsWith('gtts:')) a.playbackRate = cfg.tts.rate;   // Google-голос: швидкість на стороні браузера
+      a.onended = () => { URL.revokeObjectURL(url); done(); };
+      a.onerror = () => { URL.revokeObjectURL(url); failTo('браузер не зміг відтворити звук'); };
+      a.play().catch(e => failTo('відтворення заблоковано: ' + (e && e.message)));
+    })
+    .catch(e => failTo(String((e && e.message) || e)));
+}
+function skipCurrent() {
+  speechSynthesis.cancel();
+  if (curAudio) {
+    const c = curAudio; curAudio = null;
+    if (c.audio) c.audio.pause();
+    c.done();
+  }
+}
+function pump() {
+  if (busy || !q.length) return;
+  busy = true;
+  const text = q.shift();
+  let fired = false;
+  const done = () => { if (fired) return; fired = true; curAudio = null; busy = false; pump(); };
+  if (ttsVol() === 0) return done();   // 0% - повністю вимкнений звук бота: нічого не завантажуємо й не відтворюємо
+  const vid = cfg.tts.voice || '';
+  if (vid.startsWith('edge:')) speakServer(text, vid.slice(5), done);
+  else if (vid.startsWith('piper:') || vid.startsWith('gtts:')) speakServer(text, vid, done);
+  else speakBrowser(text, done, vid);
+}
+
+/* ---- список голосів ---- */
+let pp = { supported: true, engine: false, voices: {} };
+let ppProgress = null;
+const ONLINE = [
+  { id: 'edge:uk-UA-PolinaNeural', label: 'Polina (укр., жін., нейронний)' },
+  { id: 'gtts:uk', label: 'Google Translate (укр., жін.)' },
+  { id: 'edge:uk-UA-OstapNeural', label: 'Ostap (укр., чол., нейронний)' }
+];
+function group(label, items) {
+  const g = document.createElement('optgroup'); g.label = label;
+  items.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; g.appendChild(o); });
+  return g;
+}
+function fillVoices() {
+  const sel = document.getElementById('voice');
+  const voices = speechSynthesis.getVoices().slice();
+  const rank = v => /^uk/i.test(v.lang) ? 0 : /^ru/i.test(v.lang) ? 1 : /^en/i.test(v.lang) ? 2 : 3;
+  voices.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+  sel.innerHTML = '';
+  sel.appendChild(group('Українські, онлайн (через сервер)', ONLINE.map(v => [v.id, v.label])));
+  const ids = Object.keys(pp.voices || {});
+  if (ids.length) {
+    sel.appendChild(group('Українські, офлайн (Piper)', ids.map(id => {
+      const v = pp.voices[id];
+      return [`piper:${id}`, `${v.label} (укр., жін., офлайн)${v.installed ? '' : ' - спершу завантаж'}`];
+    })));
+  }
+  sel.appendChild(group('Системні голоси', [['', 'За замовчуванням']].concat(voices.map(v => {
+    const tag = /polina|lesya|леся/i.test(v.name) ? ', жін.' : /ostap|остап/i.test(v.name) ? ', чол.' : '';
+    return [v.voiceURI, `${v.name} (${v.lang}${tag})`];
+  }))));
+  sel.value = cfg.tts.voice;
+}
+document.getElementById('voice').addEventListener('change', e => { cfg.tts.voice = e.target.value; save(); });
+speechSynthesis.onvoiceschanged = fillVoices; fillVoices();
+
+document.getElementById('test').onclick = () => { markActive(); enqueue('Привіт! Це тест озвучки чату.', true); };
+
+/* ---- відсоткові поля гучності: повзунок і числове поле пов'язані, діапазон 0..100, крок 1% ---- */
+function bindPercent(rangeId, numId, getPct, applyPct) {   // applyPct(p) зберігає значення й застосовує його одразу; повертає прийняте p
+  const range = document.getElementById(rangeId), num = document.getElementById(numId);
+  const clamp = n => Math.min(100, Math.max(0, Math.round(n)));
+  const show = () => { range.value = getPct(); num.value = getPct(); };
+  show();
+  range.addEventListener('input', () => { const p = applyPct(clamp(Number(range.value))); num.value = p; });
+  num.addEventListener('input', () => {
+    if (num.value === '') return;   // поле тимчасово порожнє під час набору: чекаємо на цифри
+    const n = Number(num.value);
+    if (!Number.isFinite(n)) return;
+    const p = applyPct(clamp(n));
+    range.value = p;
+    if (String(p) !== num.value) num.value = p;   // значення поза межами або дробове одразу виправляємо
+  });
+  num.addEventListener('blur', show);   // порожнє або неповне поле повертається до поточного значення
+  num.addEventListener('keydown', e => { if (['-', '+', 'e', 'E', '.', ','].includes(e.key)) e.preventDefault(); });   // мінус, дріб і експоненту не приймаємо
+  num.addEventListener('keydown', e => { if (e.key === 'Enter') num.blur(); });
+}
+// гучність голосу бота: застосовується одразу, зокрема до серверного голосу, що зараз звучить
+bindPercent('ttsVolRange', 'ttsVolNum', () => cfg.tts.volumePct, p => {
+  if (p !== cfg.tts.volumePct) { cfg.tts.volumePct = p; save(); }
+  if (curAudio && curAudio.audio) curAudio.audio.volume = ttsVol();
+  return p;
+});
+// гучність сигналу втрати інтернету: окрема від голосу бота
+bindPercent('netVolRange', 'netVolNum', () => cfg.net.volumePct, p => {
+  if (p !== cfg.net.volumePct) { cfg.net.volumePct = p; save(); }
+  renderNet();   // оновлює позначку «звук вимкнено» у вікні сповіщення, якщо воно відкрите
+  return p;
+});
+// команди керування (працюють і з панелі OBS: сервер розсилає їх вікну, яке озвучує)
+function runCmd(cmd) {
+  if (cmd === 'skip') skipCurrent();
+  else if (cmd === 'clearq') q.length = 0;
+  else if (cmd === 'clearfeed') feed.innerHTML = '';
+}
+function sendCmd(cmd) { if (!wsSend({ type: 'cmd', cmd })) runCmd(cmd); }
+document.getElementById('cSkip').onclick = () => sendCmd('skip');
+document.getElementById('cClearQ').onclick = () => sendCmd('clearq');
+document.getElementById('cClearFeed').onclick = () => sendCmd('clearfeed');
+
+let activated = false;
+const hint = document.getElementById('hint');
+addEventListener('pointerdown', () => { activated = true; hint.style.display = 'none'; }, { once: true });
+setTimeout(() => { if (!activated && (ttsEnabled() || eventSpeechEnabled())) hint.style.display = 'block'; }, 1500);
+
+/* ---- офлайн-голоси Piper ---- */
+function renderPiper() {
+  const box = document.getElementById('piper');
+  box.innerHTML = '';
+  if (!pp.supported) { box.append(el('div', 'info', 'Автовстановлення доступне лише для Windows і Linux x64.')); return; }
+  for (const id of Object.keys(pp.voices)) {
+    const v = pp.voices[id];
+    const row = el('div', 'acc');
+    row.append(el('span', 'accname', `${v.label} (укр., жін.) · ${v.quality} · ~${v.mb} МБ`));
+    if (v.installed) row.append(el('span', 'cs', '✓ встановлено'));
+    else {
+      const b = el('button', 'sm', 'Завантажити');
+      b.disabled = !!ppProgress;
+      b.onclick = () => post('/api/piper/install', { voice: id });
+      row.append(b);
+    }
+    if (ppProgress && ppProgress.voice === id) row.append(el('span', 'info', `${ppProgress.info}${ppProgress.pct != null ? ' ' + ppProgress.pct + '%' : '...'}`));
+    box.append(row);
+  }
+}
+document.getElementById('piperDiag').onclick = async () => {
+  const pre = document.getElementById('diag');
+  pre.style.display = 'block'; pre.textContent = 'Перевірка...';
+  try {
+    const cur = (cfg.tts.voice || '').startsWith('piper:') ? cfg.tts.voice.slice(6) : '';
+    const r = await post('/api/piper/diagnose', { voice: cur });
+    const j = await r.json();
+    pre.textContent = j.lines.join('\n');
+  } catch (e) { pre.textContent = 'Не вдалося виконати перевірку: ' + ((e && e.message) || e); }
+};
+function onPiper(m) {
+  if (m.voices) pp = { supported: m.supported, engine: m.engine, voices: m.voices };
+  if (m.state === 'downloading') ppProgress = { voice: m.voice, info: m.info, pct: m.pct };
+  else if (m.state === 'ready') {
+    ppProgress = null;
+    cfg.tts.voice = 'piper:' + m.voice; save();
+    addSys(`✅ Офлайн-голос ${pp.voices[m.voice] ? pp.voices[m.voice].label : m.voice} встановлено і вибрано`);
+  } else if (m.state === 'error') { ppProgress = null; addSys('Не вдалося завантажити офлайн-голос: ' + m.info, true); }
+  renderPiper();
+  if (m.state !== 'downloading') fillVoices();
+}
+
+/* ---- посилання для OBS ---- */
+const obsUrl = () => location.origin + '/?dock=1' + (document.getElementById('obsTts').checked ? '&tts=1' : '');
+const refreshObs = () => { document.getElementById('obsUrl').value = obsUrl(); };
+document.getElementById('obsTts').addEventListener('change', refreshObs);
+document.getElementById('obsUrl').addEventListener('focus', e => e.target.select());
+document.getElementById('obsCopy').onclick = async e => {
+  const v = obsUrl();
+  try { await navigator.clipboard.writeText(v); }
+  catch { const i = document.getElementById('obsUrl'); i.select(); document.execCommand('copy'); }
+  const b = e.target; b.textContent = 'Скопійовано ✓';
+  setTimeout(() => { b.textContent = 'Копіювати'; }, 1500);
+};
+refreshObs();
+renderPiper();
+
+/* ---- налаштування програми: апаратне прискорення, пріоритет, режим запуску ---- */
+const PRIO_LABEL = { idle: 'Низький (Idle)', belowNormal: 'Нижче звичайного (Below Normal)', normal: 'Звичайний (Normal)', aboveNormal: 'Вище звичайного (Above Normal)', high: 'Високий (High)', realtime: 'Реального часу (Realtime)' };
+let appSettings = null;
+function renderHw(s) {
+  if (appInfo.electron !== !!s.electron) { appInfo.electron = !!s.electron; renderAccounts(); }
+  const seg = document.getElementById('hwSeg'), note = document.getElementById('hwNote'), rb = document.getElementById('hwRestart');
+  seg.querySelectorAll('button').forEach(b => { b.classList.toggle('on', (b.dataset.v === '1') === s.hardwareAcceleration); b.disabled = !s.electron; });
+  note.textContent = !s.electron
+    ? 'Доступно лише в програмі MultiChat.exe. У браузері це налаштовується в самому браузері (Налаштування, Система).'
+    : s.restartRequired ? 'Зміна застосується після перезапуску програми.'
+    : `Зараз: ${s.running ? 'Увімкнено' : 'Вимкнено'}. Якщо інтерфейс чи звук працюють нестабільно, спробуй інший режим (потрібен перезапуск).`;
+  rb.style.display = s.restartRequired ? 'inline-block' : 'none';
+}
+function renderPrio(s) {
+  const sel = document.getElementById('prSel'), note = document.getElementById('prNote');
+  if (s.priority) sel.value = s.priority;
+  note.className = 'note' + (s.priorityError ? ' err' : '');
+  note.textContent = s.priorityError || s.priorityNote || `Зараз: ${PRIO_LABEL[s.priority] || s.priority}. Зміна діє одразу, перезапуск не потрібен.`;
+}
+function renderAdmin(s) {
+  const seg = document.getElementById('admSeg'), note = document.getElementById('admNote'), rb = document.getElementById('admRestart');
+  seg.querySelectorAll('button').forEach(b => { b.classList.toggle('on', (b.dataset.v === '1') === !!s.runAsAdmin); b.disabled = !s.adminSupported; });
+  let t = '', err = false;
+  if (!s.adminSupported) t = 'Доступно лише в програмі MultiChat.exe на Windows.';
+  else if (s.adminNote) { t = s.adminNote; err = true; }
+  else if (s.adminRestartRequired) t = s.runAsAdmin ? 'Щоб застосувати, перезапусти програму: Windows попросить підтвердження (UAC). Якщо відмовиш, програма працюватиме у звичайному режимі.' : 'Щоб застосувати, перезапусти програму: вона запуститься без прав адміністратора.';
+  else t = `Зараз: ${s.elevated ? 'запущено від імені адміністратора' : 'звичайний запуск'}.`;
+  note.className = 'note' + (err ? ' err' : ''); note.textContent = t;
+  rb.style.display = s.adminRestartRequired ? 'inline-block' : 'none';
+}
+function renderApp(s) { appSettings = s; renderHw(s); renderPrio(s); renderAdmin(s); if (typeof s.apiKeys === 'boolean' && s.apiKeys !== apiOn) setApiOn(s.apiKeys); if (typeof s.kickDiagnostics === 'boolean' && s.kickDiagnostics !== kickDiag) setKickDiag(s.kickDiagnostics); }
+async function postSettings(body) {   // повертає актуальні налаштування або показує зрозумілу помилку
+  try {
+    const r = await post('/api/settings', body), j = await r.json();
+    if (!r.ok) { addSys('⚠️ ' + (j.error || 'Не вдалося зберегти налаштування')); return null; }
+    renderApp(j); return j;
+  } catch (e) { addSys('⚠️ Не вдалося зберегти налаштування: ' + ((e && e.message) || e)); return null; }
+}
+document.querySelectorAll('#hwSeg button').forEach(b => { b.onclick = () => postSettings({ hardwareAcceleration: b.dataset.v === '1' }); });
+document.querySelectorAll('#admSeg button').forEach(b => { b.onclick = () => postSettings({ runAsAdmin: b.dataset.v === '1' }); });
+document.getElementById('prSel').onchange = async e => {
+  const v = e.target.value;
+  if (v === 'realtime') {
+    const ok = await askConfirm('Пріоритет «Реального часу»', 'Цей рівень може порушити нормальну роботу Windows, OBS та інших програм і спричинити зависання системи. Для стримінгу зазвичай достатньо «Звичайний» або «Вище звичайного». Увімкнути Realtime?', 'Увімкнути');
+    if (!ok) { if (appSettings) renderPrio(appSettings); return; }
+  }
+  if (!(await postSettings({ priority: v })) && appSettings) renderPrio(appSettings);
+};
+const restartApp = async () => { await post('/api/restart'); addSys('Перезапуск програми...'); };
+document.getElementById('hwRestart').onclick = restartApp;
+document.getElementById('admRestart').onclick = restartApp;
+fetch('/api/settings').then(r => r.json()).then(renderApp).catch(() => {});
+document.getElementById('apiOn').onchange = async e => {   // перемикач розділу «API-ключі»
+  const want = e.target.checked;
+  const j = await postSettings({ apiKeysEnabled: want });
+  if (!j) { e.target.checked = apiOn; return; }   // не вдалося зберегти: повертаємо попередній стан
+  setApiOn(j.apiKeys);
+};
+document.getElementById('devKick').onchange = async e => {   // розділ «Для розробників»: Діагностика Kick
+  const want = e.target.checked;
+  const j = await postSettings({ kickDiagnostics: want });
+  if (!j) { e.target.checked = kickDiag; return; }   // не вдалося зберегти: повертаємо попередній стан
+  setKickDiag(j.kickDiagnostics);
+};
+document.getElementById('devKickOpen').onclick = () => { if (kickDiag) window.open('/api/kick-debug', '_blank'); };
+renderDevState();
+renderApiState();
+
+/* ---- звук втрати інтернету: вибір сигналу, прослуховування ---- */
+(function initNetSound() {
+  const sel = document.getElementById('netSound');
+  const cats = [...new Set(NET_SOUNDS.map(x => x.cat))];
+  cats.forEach(c => {
+    const g = document.createElement('optgroup'); g.label = c;
+    NET_SOUNDS.filter(x => x.cat === c).forEach(x => { const o = document.createElement('option'); o.value = x.id; o.textContent = `${x.name} (${netSoundDur(x).toFixed(1)} с)`; g.appendChild(o); });
+    sel.appendChild(g);
+  });
+  if (!NET_SOUNDS.some(x => x.id === cfg.net.sound)) { cfg.net.sound = NET_DEFAULT_SOUND; save(); }   // немає (або не вибрано) - стандартний короткий сигнал
+  sel.value = cfg.net.sound;
+  sel.onchange = () => { set('net.sound', sel.value); playNetSound(sel.value, netVol()); };
+  document.getElementById('netPlay').onclick = () => playNetSound(cfg.net.sound, netVol());   // прослухати можна й коли сповіщення вимкнено
+  document.querySelectorAll('[data-k^="net."]').forEach(e => e.addEventListener('change', () => { syncNetSound(); renderNet(); }));
+})();
+
+/* ---- показники навантаження (CPU, RAM) у нижній панелі ---- */
+const SYS_STALE_MS = 6000;   // немає свіжих даних довше за це - показуємо «—»
+let sysData = null, sysStaleTimer = null, sysWant = false;
+const sysShown = () => DOCK ? !!cfg.sys.obs : !!cfg.sys.on;   // вікно програми показує за «sys.on», панель OBS - за налаштуванням «показувати в OBS»
+const fmtNum = (v, d) => v.toFixed(d).replace('.', ',');
+const fmtPct = v => (v == null || !Number.isFinite(v)) ? '—' : (v < 10 ? fmtNum(Math.max(0, v), 1) : String(Math.round(Math.min(100, v)))) + '%';
+const fmtAmt = b => (b / 1048576 < 1024) ? Math.round(b / 1048576) + ' МБ' : fmtNum(b / 1073741824, 1) + ' ГБ';   // до 1 ГБ - в МБ, щоб не було «0,0 ГБ»
+const fmtTotalGb = b => { const g = b / 1073741824; return Math.abs(g - Math.round(g)) < 0.05 ? String(Math.round(g)) : fmtNum(g, 1); };
+const fmtUsedTotal = (used, total) => (used / 1048576 < 1024 ? Math.round(used / 1048576) + ' МБ' : fmtNum(used / 1073741824, 1)) + '/' + fmtTotalGb(total) + ' ГБ';   // «9,9/16 ГБ» або «240 МБ/16 ГБ»
+function setRam(d, k) {   // «62%» і, якщо ввімкнено, в дужках: використано; використано + вільно на всьому ПК; або використано/весь обсяг
+  const v = document.getElementById('smRamV');
+  v.textContent = '';
+  const used = d ? d[k].usedMem : null, total = d ? d.totalMem : null;
+  if (!(total > 0) || used == null || !Number.isFinite(used)) { v.textContent = '—'; return; }
+  v.append(fmtPct(Math.min(100, used / total * 100)));
+  if (!cfg.sys.mem) return;
+  const amt = document.createElement('span'); amt.className = 'memamt';
+  const fmt = cfg.sys.memFmt;
+  if (fmt === 'usedtotal') {   // у вузькому вікні довгий запис «9,9/16 ГБ» замінюється коротким «9,9 ГБ» (CSS)
+    const lg = document.createElement('span'); lg.className = 'mt-long'; lg.textContent = fmtUsedTotal(used, total);
+    const sh = document.createElement('span'); sh.className = 'mt-short'; sh.textContent = fmtAmt(used);
+    amt.append(' (', lg, sh);
+  } else {
+    amt.append(' (' + fmtAmt(used));
+    const sysUsed = d.sys && d.sys.usedMem;
+    if (fmt === 'usedfree' && Number.isFinite(sysUsed)) {
+      const f = document.createElement('span'); f.className = 'memfree'; f.textContent = ', вільно ' + fmtAmt(Math.max(0, total - sysUsed)); amt.append(f);
+    }
+  }
+  amt.append(')'); v.append(amt);
+}
+function renderSys() {
+  const box = document.getElementById('sysm');
+  const show = sysShown();
+  box.hidden = !show;
+  if (!show) return;
+  const k = cfg.sys.mode === 'system' ? 'sys' : 'app';
+  const d = sysData && Date.now() - sysData.rx < SYS_STALE_MS ? sysData : null;   // дані застаріли або ще не надійшли - «—»
+  document.getElementById('smCpuV').textContent = d ? fmtPct(d[k].cpu) : '—';
+  box.dataset.mem = cfg.sys.mem ? '1' : '0'; box.dataset.memfmt = cfg.sys.memFmt;
+  setRam(d, k);
+  const whose = k === 'app' ? 'лише застосунку MultiChat (усі його процеси)' : 'усієї системи';
+  document.getElementById('smCpu').title = k === 'app'
+    ? 'CPU: яку частку всієї потужності процесора використовує лише MultiChat (усі його процеси). Оновлюється раз на 1,5 с. «—» означає, що даних поки немає.'
+    : 'CPU: поточне завантаження процесора всією системою, у відсотках. Оновлюється раз на 1,5 с. «—» означає, що даних поки немає.';
+  const inBr = !cfg.sys.mem ? '' : ({ usedfree: ', а в дужках - скільки саме використано і скільки оперативної пам\'яті ще вільно на всьому комп\'ютері', usedtotal: ', а в дужках - скільки саме використано і який загальний обсяг оперативної пам\'яті на комп\'ютері' }[cfg.sys.memFmt] || ', а в дужках - скільки саме використано');
+  document.getElementById('smRam').title = (k === 'app'
+    ? 'RAM: скільки оперативної пам\'яті використовує лише MultiChat: відсоток від усієї пам\'яті комп\'ютера'
+    : 'RAM: використана оперативна пам\'ять усієї системи: відсоток від усієї пам\'яті') + inBr + '. «—» означає, що даних поки немає.';
+}
+function onSysStats(m) {
+  if (!m || !m.sys || !m.app) return;
+  sysData = { ...m, rx: Date.now() };
+  clearTimeout(sysStaleTimer); sysStaleTimer = setTimeout(renderSys, SYS_STALE_MS + 100);   // якщо дані перестануть надходити - покажемо «—»
+  renderSys();
+}
+function syncSysSub(force) {   // підписуємось лише поки показники ввімкнені й вікно видно; інакше сервер не збирає дані взагалі
+  const want = sysShown() && !document.hidden;
+  if (force || want !== sysWant) { sysWant = want; wsSend({ type: 'sysSub', on: want }); }
+}
+function sendSysCfg() {   // вікно програми повідомляє серверу налаштування показників, сервер розсилає їх панелям OBS
+  if (DOCK) return;
+  wsSend({ type: 'sysCfg', obs: !!cfg.sys.obs, mode: cfg.sys.mode, mem: !!cfg.sys.mem, memFmt: cfg.sys.memFmt });
+}
+function onSysCfg(m) {   // панель OBS отримує налаштування від програми (у своєму сховищі не зберігає)
+  if (!DOCK || !m) return;
+  cfg.sys.obs = m.obs !== false;
+  cfg.sys.mode = m.mode === 'system' ? 'system' : 'app';
+  cfg.sys.mem = m.mem !== false;
+  cfg.sys.memFmt = ['usedfree', 'usedtotal'].includes(m.memFmt) ? m.memFmt : 'used';
+  syncSysSub(); renderSys();
+}
+document.addEventListener('visibilitychange', () => { syncSysSub(); renderSys(); });
+(function initSysSettings() {
+  const seg = document.getElementById('sysSeg');
+  const msel = document.getElementById('memFmtSel'), memChk = document.querySelector('[data-k="sys.mem"]');
+  const paint = () => {
+    seg.querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.dataset.v === cfg.sys.mode); b.disabled = !(cfg.sys.on || cfg.sys.obs); });
+    const any = cfg.sys.on || cfg.sys.obs;   // параметри вигляду потрібні, поки показники ввімкнені хоч де-небудь
+    msel.value = cfg.sys.memFmt; msel.disabled = !any || !cfg.sys.mem;
+    memChk.disabled = !any;
+  };
+  seg.querySelectorAll('button').forEach(b => { b.onclick = () => { cfg.sys.mode = b.dataset.v; save(); paint(); renderSys(); sendSysCfg(); }; });
+  msel.onchange = () => { cfg.sys.memFmt = ['usedfree', 'usedtotal'].includes(msel.value) ? msel.value : 'used'; save(); paint(); renderSys(); sendSysCfg(); };
+  memChk.addEventListener('change', () => { paint(); renderSys(); sendSysCfg(); });
+  document.querySelector('[data-k="sys.on"]').addEventListener('change', () => { paint(); syncSysSub(); renderSys(); });
+  document.querySelector('[data-k="sys.obs"]').addEventListener('change', () => { paint(); sendSysCfg(); });
+  paint(); renderSys();
+})();
+
+/* ---- права кнопка миші: що під курсором (головний процес додає пункти «Копіювати текст повідомлення», «Копіювати нік», «Виділити весь чат») ---- */
+window.__ctx = null;
+document.addEventListener('contextmenu', e => {
+  const t = e.target && e.target.closest ? e.target : null;
+  const msg = t ? t.closest('.msg') : null;
+  const inFeed = !!(t && t.closest('#feed'));
+  if (msg && !t.closest('.mute')) {   // на іконці мута меню не пропонуємо
+    const u = msg.querySelector('.user'), x = msg.querySelector('.text');
+    window.__ctx = { inFeed: true, user: u ? u.textContent.trim() : '', text: x ? x.textContent.trim() : '' };
+  } else window.__ctx = inFeed ? { inFeed: true, user: '', text: '' } : null;
+}, true);
+window.selectFeed = () => {   // виділяє весь чат, щоб його можна було скопіювати
+  const r = document.createRange(); r.selectNodeContents(feed);
+  const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+};
+
+/* ---- WebSocket до локального сервера ---- */
+const myId = (self.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'c' + Math.random().toString(36).slice(2) + Date.now();
+const canSpeak = P.get('tts') === '1' || (!DOCK && P.get('tts') !== '0');
+const isElectronApp = /Electron/i.test(navigator.userAgent);
+let wsRef = null, wsOnline = false, lastActiveSent = 0;
+const wsSend = o => { if (wsRef && wsRef.readyState === 1) { wsRef.send(JSON.stringify(o)); return true; } return false; };
+function markActive() { const now = Date.now(); if (now - lastActiveSent > 1500) { lastActiveSent = now; wsSend({ type: 'active', id: myId }); } }
+['pointerdown', 'keydown'].forEach(ev => addEventListener(ev, markActive, true));
+function updateSrv() {
+  const t = !wsOnline ? 'сервер: офлайн' : 'сервер: онлайн' + (canSpeak ? (isSpeaker ? ' | озвучка в цьому вікні' : ' | озвучка в іншому вікні (клікни тут, щоб перенести)') : '');
+  document.getElementById('srv').textContent = t;
+}
+function connectWS() {
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  wsRef = ws;
+  ws.onopen = () => { wsOnline = true; updateSrv(); wsSend({ type: 'hello', id: myId, canSpeak, electron: isElectronApp }); syncSysSub(true); sendSysCfg(); };
+  ws.onclose = () => { wsOnline = false; sysWant = false; updateSrv(); setTimeout(connectWS, 2000); };
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.type === 'chat') { addMsg(m); const s = clean(m); if (s && !isDup(m.platform + '|' + m.user + '|' + s)) enqueue(s); }
+    else if (m.type === 'status') setStatus(m);
+    else if (m.type === 'event') { addEvent(m); speakEvent(m); }
+    else if (m.type === 'live') setLive(m);
+    else if (m.type === 'viewers') onViewers(m);
+    else if (m.type === 'sysStats') onSysStats(m);
+    else if (m.type === 'sysCfg') onSysCfg(m);
+    else if (m.type === 'piper') onPiper(m);
+    else if (m.type === 'net') onNet(m);
+    else if (m.type === 'notice') { if (net.online) addSys(`${PL[m.platform] || ''}: ${m.text}`); }
+    else if (m.type === 'cmd') runCmd(m.cmd);
+    else if (m.type === 'mute') addMuted(m.user, true);
+    else if (m.type === 'speaker') {
+      const was = isSpeaker;
+      isSpeaker = !canSpeak ? false : m.id === myId;
+      if (was && !isSpeaker) { q.length = 0; skipCurrent(); }   // інше вікно перейняло озвучку
+      updateSrv();
+    }
+    else if (m.type === 'accounts') { acc = m; if (typeof m.kickDiag === 'boolean' && m.kickDiag !== kickDiag) { kickDiag = m.kickDiag; cfg.kickDiag = kickDiag; save(); renderDevState(); } if (typeof m.apiKeys === 'boolean' && m.apiKeys !== apiOn) setApiOn(m.apiKeys); else { renderAccounts(); renderKeys(); } }   // сервер повідомляє стан перемикача API-ключів
+  };
+}
+renderAccounts();
+renderKeys();
+renderViewers();
+connectWS();
+fetch('/api/version').then(r => r.ok ? r.json() : Promise.reject()).then(({ version }) => {
+  if (!/^\d+\.\d+\.\d+$/.test(version)) return;
+  const label = `v${version}`;
+  document.getElementById('appVersionFooter').textContent = label;
+  document.title = `MultiChat + озвучка ${label}`;
+}).catch(() => {});
+</script>
+</body>
+</html>
+
