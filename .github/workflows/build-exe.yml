@@ -2,6 +2,11 @@ name: Build MultiChat
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Optional existing version tag to rebuild and publish
+        required: false
+        type: string
   push:
     tags:
       - 'v*'
@@ -14,6 +19,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -22,7 +29,8 @@ jobs:
       - name: Package Windows app
         shell: pwsh
         run: |
-          npx --yes @electron/packager . MultiChat --platform=win32 --arch=x64 --out=dist --overwrite --electron-version=33.4.11 --icon=assets/icon.ico --tmpdir=dist/.build-tmp --ignore="^/dist" --ignore="^/\.github" --ignore="^/\.git" --ignore="^/\.build-cache" --ignore="\.bat$" --ignore="^/accounts\.json$" --ignore="^/config\.json$" --ignore="^/settings\.json$" --ignore="^/voices(/.*)?$" --ignore="^/\.env.*$" --ignore="\.log$" --ignore="\.token$"
+          $tmpDir = Join-Path $env:RUNNER_TEMP 'multichat-electron-packager'
+          npx --yes @electron/packager . MultiChat --platform=win32 --arch=x64 --out=dist --overwrite --electron-version=44.9.3 --icon=assets/icon.ico "--tmpdir=$tmpDir" --ignore="^/dist" --ignore="^/\.github" --ignore="^/\.git" --ignore="^/\.build-cache" --ignore="\.bat$" --ignore="^/accounts\.json$" --ignore="^/config\.json$" --ignore="^/settings\.json$" --ignore="^/voices(/.*)?$" --ignore="^/\.env.*$" --ignore="\.log$" --ignore="\.token$"
           if ($LASTEXITCODE -ne 0) { throw 'Electron Packager failed.' }
           $app = Join-Path $PWD 'dist/MultiChat-win32-x64'
           Copy-Item config.example.json (Join-Path $app 'config.example.json') -Force
@@ -31,10 +39,12 @@ jobs:
             if (Test-Path (Join-Path $app $name)) { throw "Personal data found in package: $name" }
           }
       - name: Prepare release notes and archive
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
         shell: pwsh
         run: |
-          $tag = $env:GITHUB_REF_NAME
+          $tag = if ($env:RELEASE_TAG) { $env:RELEASE_TAG } else { $env:GITHUB_REF_NAME }
           $version = $tag.TrimStart('v')
           $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
           if ($version -ne $packageVersion) { throw "Tag $tag does not match package.json version $packageVersion" }
@@ -43,19 +53,21 @@ jobs:
           $match = [regex]::Match($content, $pattern)
           if (-not $match.Success -or [string]::IsNullOrWhiteSpace($match.Groups[1].Value)) { throw "CHANGELOG.md must contain full notes for $version" }
           $notesPath = Join-Path $PWD 'dist/RELEASE_NOTES.md'
-          Set-Content -Path $notesPath -Value $match.Groups[1].Value.Trim() -Encoding utf8
+          $notes = $match.Groups[1].Value.Trim() + "`r`n`r`n### Windows build`r`n- Windows package uses Electron 44.9.3 (Node.js 24.22.0)."
+          Set-Content -Path $notesPath -Value $notes -Encoding utf8
           Compress-Archive -Path 'dist/MultiChat-win32-x64/*' -DestinationPath "dist/MultiChat-$version-windows-x64.zip" -Force
       - uses: actions/upload-artifact@v4
         with:
           name: MultiChat-win
           path: dist/MultiChat-win32-x64/
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         shell: pwsh
         run: |
-          $tag = $env:GITHUB_REF_NAME
+          $tag = if ($env:RELEASE_TAG) { $env:RELEASE_TAG } else { $env:GITHUB_REF_NAME }
           $archive = "dist/MultiChat-$($tag.TrimStart('v'))-windows-x64.zip"
           $title = "MultiChat $tag"
           gh release view $tag *> $null
