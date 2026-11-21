@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<title>MultiChat: віджет переможця</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
+#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:4vh 4vw;box-sizing:border-box}
+#card{opacity:0;max-width:92vw;box-sizing:border-box;padding:.5em 1.2em .6em;border-radius:28px;text-align:center;font-family:var(--ff);font-weight:var(--fw);color:var(--nc);background:var(--bg);overflow-wrap:anywhere;font-size:16px}
+#card.sh>*{text-shadow:0 4px 18px rgba(0,0,0,.7),0 0 3px rgba(0,0,0,.9)}
+#t{font-size:var(--ts);color:var(--tc);letter-spacing:.06em;line-height:1.15}
+#n{font-size:var(--ns);color:var(--nc);line-height:1.1;margin:.08em 0}
+#p{font-size:calc(var(--ms) * .75);color:var(--mc);opacity:.85;line-height:1.2}
+#m{font-size:var(--ms);color:var(--mc);line-height:1.25;margin-top:.15em}
+#t:empty,#p:empty,#m:empty{display:none}
+#wrap{position:relative;display:flex;align-items:center;justify-content:center;max-width:94vw}
+#tk{position:absolute;inset:0;display:none;pointer-events:none}
+#wrap.tkm #tk{display:block}
+#wrap.tkm #card{min-width:min(1000px,88vw);min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.tkh{position:absolute;top:0;bottom:0;box-sizing:border-box;background:var(--tkp);color:var(--tki);font-family:var(--ff);display:flex;align-items:center;justify-content:center;text-align:center;filter:drop-shadow(0 8px 16px rgba(0,0,0,.45))}
+.tkh::before{content:"";position:absolute;inset:14px;border:3px dashed var(--tka);border-radius:16px;opacity:.75}
+#tkL{left:0;width:72%;border-radius:24px 0 0 24px;-webkit-mask:radial-gradient(circle 26px at 0 50%,#0000 96%,#000);mask:radial-gradient(circle 26px at 0 50%,#0000 96%,#000)}
+#tkR{right:0;width:calc(28% + 14px);border-radius:0 24px 24px 0;-webkit-mask:radial-gradient(circle 26px at 100% 50%,#0000 96%,#000);mask:radial-gradient(circle 26px at 100% 50%,#0000 96%,#000)}
+.tk-in{position:relative;padding:0 28px;font-weight:800;line-height:1.1}
+.tk-top{font-size:26px;letter-spacing:.3em;color:var(--tka)}
+.tk-big{font-size:68px;letter-spacing:.05em;margin:12px 0}
+.tk-sub{font-size:24px;font-weight:600;opacity:.75}
+.tk-no{font-size:34px;color:var(--tka)}
+.tk-num{font-size:44px;letter-spacing:.08em;margin:8px 0 14px}
+.tk-bar{height:46px;margin:0 8px;background:repeating-linear-gradient(90deg,var(--tki) 0 3px,transparent 3px 6px,var(--tki) 6px 8px,transparent 8px 13px);opacity:.8}
+</style>
+</head>
+<body>
+<canvas id="fx"></canvas>
+<div id="stage"><div id="wrap">
+  <div id="card"><div id="t"></div><div id="n"></div><div id="p"></div><div id="m"></div></div>
+  <div id="tk">
+    <div id="tkL" class="tkh"><div class="tk-in"><div class="tk-top">&#9733; РОЗІГРАШ &#9733;</div><div class="tk-big">ВИГРАШНИЙ<br>КВИТОК</div><div class="tk-sub">хто ж щасливчик?</div></div></div>
+    <div id="tkR" class="tkh"><div class="tk-in"><div class="tk-no">№</div><div class="tk-num" id="tkNum">000000</div><div class="tk-bar"></div></div></div>
+  </div>
+</div></div>
+<script>
+(() => {
+  const QS = new URLSearchParams(location.search), PREVIEW = QS.get('preview') === '1';
+  const CAT = (QS.get('cat') || '').toLowerCase();   // розіграш, переможців якого показує цей віджет (у кожного розіграшу свій віджет і свої налаштування); без ?cat= працює старе універсальне посилання
+  let cfgs = {}, curCat = CAT;
+  const PL = { twitch: 'Twitch', youtube: 'YouTube', tiktok: 'TikTok', kick: 'Kick' };
+  let cfg = { title: 'ПЕРЕМОЖЕЦЬ', showMessage: true, showPlatform: true, duration: 10, animation: 'zoom', effect: 'confetti', sound: 'fanfare', soundUrl: '', soundFile: '', soundVer: 0, volume: 70, font: 'Segoe UI', bold: true, shadow: true, titleSize: 48, nameSize: 110, msgSize: 40, titleColor: '#ffd54a', nameColor: '#ffffff', msgColor: '#d6d6e6', bgColor: '#000000', bgOpacity: 55, ticketMode: true, tearSound: true, ticketColor: '#f3e2b0', ticketInk: '#3a2a12', ticketAccent: '#d9473b' };
+  const $ = id => document.getElementById(id), card = $('card'), wrap = $('wrap'), tk = $('tk'), tkL = $('tkL'), tkR = $('tkR'), cv = $('fx'), g = cv.getContext('2d');
+  const SAMPLE = { user: 'Тест_Олена', platform: 'twitch', msg: '!розіграш я хочу виграти' };
+  let cur = null, hideT = 0, anim = null, fxRun = 0, parts = [];
+
+  /* ---------- вигляд ---------- */
+  function hexRgb(h) { const m = /^#([0-9a-f]{6})$/i.exec(h || ''); const n = m ? parseInt(m[1], 16) : 0; return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+  function applyCfg(c) {
+    cfg = { ...cfg, ...(c || {}) };
+    const s = card.style, [r, gg, b] = hexRgb(cfg.bgColor);
+    const ff = `"${String(cfg.font || 'Segoe UI').replace(/"/g, '')}", "Segoe UI", system-ui, sans-serif`;
+    s.setProperty('--ff', ff);
+    s.setProperty('--fw', cfg.bold ? '800' : '400');
+    s.setProperty('--ts', cfg.titleSize + 'px'); s.setProperty('--ns', cfg.nameSize + 'px'); s.setProperty('--ms', cfg.msgSize + 'px');
+    s.setProperty('--tc', cfg.titleColor); s.setProperty('--nc', cfg.nameColor); s.setProperty('--mc', cfg.msgColor);
+    s.setProperty('--bg', `rgba(${r},${gg},${b},${Math.max(0, Math.min(100, cfg.bgOpacity)) / 100})`);
+    card.classList.toggle('sh', !!cfg.shadow);
+    wrap.style.setProperty('--tkp', cfg.ticketColor); wrap.style.setProperty('--tki', cfg.ticketInk); wrap.style.setProperty('--tka', cfg.ticketAccent); wrap.style.setProperty('--ff', ff);   // шрифт і для квитка
+  }
+  function fill(w) {
+    $('t').textContent = cfg.title || '';
+    $('n').textContent = w.user || '';
+    $('p').textContent = cfg.showPlatform && PL[w.platform] ? PL[w.platform] : '';
+    $('m').textContent = cfg.showMessage && w.msg ? w.msg : '';
+  }
+
+  /* ---------- поява й зникнення ---------- */
+  const ANIMS = {
+    zoom: [{ opacity: 0, transform: 'scale(.25)' }, { opacity: 1, transform: 'scale(1)' }],
+    slide: [{ opacity: 0, transform: 'translateY(160px)' }, { opacity: 1, transform: 'translateY(0)' }],
+    fade: [{ opacity: 0 }, { opacity: 1 }],
+    bounce: [{ opacity: 0, transform: 'translateY(-600px)', offset: 0 }, { opacity: 1, transform: 'translateY(0)', offset: .5 }, { transform: 'translateY(-90px)', offset: .68 }, { transform: 'translateY(0)', offset: .82 }, { transform: 'translateY(-24px)', offset: .91 }, { opacity: 1, transform: 'translateY(0)', offset: 1 }]
+  };
+  function stopAnim() { if (anim) { anim.cancel(); anim = null; } }
+  function show(w) {
+    cur = w; clearTimeout(hideT); stopAnim(); stopTk();
+    if (cfg.ticketMode && w && w.raffle === 'tickets') return showTicket(w);   // «По квитках»: переможець у вигляді квитка, що розривається
+    wrap.classList.remove('tkm');
+    fill(w);
+    const a = cfg.animation in ANIMS ? cfg.animation : 'zoom';
+    anim = card.animate(ANIMS[a], { duration: a === 'bounce' ? 1100 : a === 'fade' ? 700 : 650, easing: a === 'bounce' ? 'ease-out' : 'cubic-bezier(.2,1.3,.4,1)', fill: 'forwards' });
+    runFx(cfg.effect, Math.max(3, Number(cfg.duration) || 10));
+    playSound();
+    hideT = setTimeout(hide, Math.max(3, Number(cfg.duration) || 10) * 1000);
+  }
+  function hide() {
+    clearTimeout(hideT); stopAnim();
+    const tkOn = wrap.classList.contains('tkm');
+    stopTk(tkOn);   // у режимі квитка анімації не скасовуємо різко: зникає весь блок разом
+    const target = tkOn ? wrap : card;
+    const a = target.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(.92)' }], { duration: 500, easing: 'ease-in', fill: 'forwards' });
+    anim = a; a.onfinish = () => { if (anim === a) { stopAnim(); stopTk(); card.style.opacity = '0'; wrap.classList.remove('tkm'); cur = null; if (PREVIEW) idle(); } };
+  }
+  function idle() { if (!PREVIEW) return; stopAnim(); stopTk(); wrap.classList.remove('tkm'); fill(cur || SAMPLE); card.style.opacity = '1'; }   // у попередньому перегляді картка завжди видна
+
+
+  /* ---------- квиток, що розривається («По квитках») ---------- */
+  let tkAnims = [], tkTimers = [];
+  const TK_JAG = 14, TK_N = 14;   // зубці розриву: глибина в px і кількість; зубці лівої й правої половин збігаються
+  (function jag() {
+    const l = ['0 0'], r = ['100% 0'];
+    for (let i = 0; i <= TK_N; i++) {
+      const y = (i * 100 / TK_N).toFixed(2) + '%';
+      l.push((i % 2 ? `calc(100% - ${TK_JAG}px)` : '100%') + ' ' + y);   // ліва половина: зубці вперед на парних точках
+      r.push((i % 2 ? '0' : `${TK_JAG}px`) + ' ' + y);                   // права половина: навпаки, тому половини стуляються без щілини
+    }
+    l.push('0 100%'); r.push('100% 100%');
+    tkL.style.clipPath = 'polygon(' + l.join(',') + ')';
+    tkR.style.clipPath = 'polygon(' + r.join(',') + ')';
+  })();
+  function stopTk(keepAnims) {   // keepAnims: лише скасувати заплановані кроки, не чіпаючи вже запущені анімації
+    tkTimers.forEach(clearTimeout); tkTimers = [];
+    if (keepAnims) return;
+    tkAnims.forEach(a => { try { a.cancel(); } catch {} }); tkAnims = [];
+  }
+  const tkAt = (ms, f) => { tkTimers.push(setTimeout(f, ms)); };
+  const tkAnim = (el, kf, o) => { const a = el.animate(kf, { fill: 'forwards', ...o }); tkAnims.push(a); return a; };
+  function showTicket(w) {
+    const secs = Math.max(6, Number(cfg.duration) || 10);
+    fill(w); $('tkNum').textContent = String(100000 + Math.floor(Math.random() * 900000));
+    wrap.classList.add('tkm'); card.style.opacity = '0';
+    // 1. квиток з'являється
+    tkAnim(tk, [{ opacity: 0, transform: 'scale(.35) rotate(-7deg)' }, { opacity: 1, transform: 'scale(1) rotate(0)' }], { duration: 650, easing: 'cubic-bezier(.2,1.3,.4,1)' });
+    // 2. напруга: квиток труситься
+    tkAt(1250, () => tkAnim(tk, [{ transform: 'rotate(0)' }, { transform: 'rotate(-1.4deg) translateX(-4px)' }, { transform: 'rotate(1.4deg) translateX(4px)' }, { transform: 'rotate(-1deg) translateX(-3px)' }, { transform: 'rotate(1deg) translateX(3px)' }, { transform: 'rotate(0)' }], { duration: 520 }));
+    // 3. розрив: половини розлітаються, чути шурхіт паперу
+    tkAt(1850, () => {
+      playTear();
+      tkAnim(tkL, [{ transform: 'none', opacity: 1 }, { transform: 'translate(-14%,-3%) rotate(-5deg)', opacity: 1, offset: .35 }, { transform: 'translate(-70%,22%) rotate(-26deg)', opacity: 0 }], { duration: 950, easing: 'ease-in' });
+      tkAnim(tkR, [{ transform: 'none', opacity: 1 }, { transform: 'translate(16%,-5%) rotate(6deg)', opacity: 1, offset: .35 }, { transform: 'translate(80%,26%) rotate(24deg)', opacity: 0 }], { duration: 950, easing: 'ease-in' });
+    });
+    // 4. з-під квитка з'являється переможець: ефект і звук перемоги
+    tkAt(2150, () => {
+      tkAnim(card, [{ opacity: 0, transform: 'scale(.8)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 550, easing: 'cubic-bezier(.2,1.3,.4,1)' });
+      runFx(cfg.effect, Math.max(3, secs - 2.2)); playSound();
+    });
+    hideT = setTimeout(hide, secs * 1000);
+  }
+  function playTear() {   // шурхіт паперу, що рветься: шум зі «стрибками» гучності й смуговим фільтром, частота якого росте
+    if (!cfg.tearSound || !(Number(cfg.volume) > 0)) return;
+    try {
+      const c = audio(), t = c.currentTime + .02, d = .6, n = Math.max(1, Math.floor(c.sampleRate * d)), buf = c.createBuffer(1, n, c.sampleRate), ch = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) {
+        const env = Math.pow(Math.sin(Math.PI * i / n), .6), rip = .35 + .65 * Math.abs(Math.sin(i / c.sampleRate * 2 * Math.PI * 38 + Math.random() * 2)), crack = Math.random() < .012 ? 1 : 0;
+        ch[i] = ((Math.random() * 2 - 1) * env * rip + crack * (Math.random() * 2 - 1)) * .9;
+      }
+      const s = c.createBufferSource(), fl = c.createBiquadFilter(), gn = c.createGain();
+      s.buffer = buf; fl.type = 'bandpass'; fl.Q.value = .8; fl.frequency.setValueAtTime(900, t); fl.frequency.exponentialRampToValueAtTime(4200, t + d);
+      gn.gain.value = 1.3; s.connect(fl); fl.connect(gn); gn.connect(master); s.start(t);
+      tone(95, t, .22, 'sine', .45);   // глухий «тук» на початку розриву
+    } catch {}
+  }
+
+  /* ---------- ефекти ---------- */
+  function fit() { cv.width = innerWidth; cv.height = innerHeight; }
+  addEventListener('resize', fit); fit();
+  const rnd = (a, b) => a + Math.random() * (b - a), pick = a => a[Math.floor(Math.random() * a.length)];
+  const COLORS = ['#ff4d6d', '#ffd23f', '#3ddc84', '#4cc9f0', '#b388ff', '#ff9f1c', '#ffffff'];
+  function burst(x, y, n) { const hue = rnd(0, 360); for (let i = 0; i < n; i++) { const a = rnd(0, Math.PI * 2), v = rnd(2, 9); parts.push({ k: 'spark', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1, dec: rnd(.008, .018), c: `hsl(${hue + rnd(-25, 25)},100%,${rnd(55, 75)}%)`, s: rnd(2, 4) }); } }
+  function spawn(kind) {
+    const W = cv.width, H = cv.height;
+    if (kind === 'confetti') for (let i = 0; i < 4; i++) parts.push({ k: 'conf', x: rnd(0, W), y: -20, vx: rnd(-1.5, 1.5), vy: rnd(3, 7), r: rnd(0, 6), vr: rnd(-.2, .2), w: rnd(8, 16), h: rnd(5, 10), c: pick(COLORS), life: 1, dec: 0 });
+    else if (kind === 'stars') for (let i = 0; i < 2; i++) parts.push({ k: 'star', x: rnd(0, W), y: rnd(H * .2, H), vx: rnd(-.4, .4), vy: rnd(-2.2, -.6), r: rnd(0, 3), vr: rnd(-.05, .05), s: rnd(8, 22), c: pick(['#fff6a8', '#ffd23f', '#ffffff', '#ffe08a']), life: 1, dec: rnd(.004, .009) });
+  }
+  function runFx(kind, secs) {
+    const id = ++fxRun; parts = [];
+    if (!kind || kind === 'none') { g.clearRect(0, 0, cv.width, cv.height); return; }
+    const end = performance.now() + secs * 1000 * .8; let last = 0, lastBurst = 0;
+    if (kind === 'confetti') for (let i = 0; i < 140; i++) parts.push({ k: 'conf', x: rnd(0, cv.width), y: rnd(-cv.height * .6, 0), vx: rnd(-1.5, 1.5), vy: rnd(3, 7), r: rnd(0, 6), vr: rnd(-.2, .2), w: rnd(8, 16), h: rnd(5, 10), c: pick(COLORS), life: 1, dec: 0 });
+    (function frame(t) {
+      if (id !== fxRun) return;
+      g.clearRect(0, 0, cv.width, cv.height);
+      const live = t < end;
+      if (live && t - last > 50) { spawn(kind); last = t; }
+      if (live && kind === 'fireworks' && t - lastBurst > 520) { burst(rnd(cv.width * .12, cv.width * .88), rnd(cv.height * .1, cv.height * .55), 70); lastBurst = t; }
+      parts = parts.filter(p => {
+        if (p.k === 'conf') { p.x += p.vx; p.y += p.vy; p.r += p.vr; if (p.y > cv.height + 30) return false; g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.fillStyle = p.c; g.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); g.restore(); return true; }
+        if (p.k === 'spark') { p.x += p.vx; p.y += p.vy; p.vy += .12; p.vx *= .985; p.life -= p.dec; if (p.life <= 0) return false; g.globalAlpha = p.life; g.fillStyle = p.c; g.beginPath(); g.arc(p.x, p.y, p.s, 0, 7); g.fill(); g.globalAlpha = 1; return true; }
+        p.x += p.vx; p.y += p.vy; p.r += p.vr; p.life -= p.dec; if (p.life <= 0) return false;
+        g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.globalAlpha = Math.min(1, p.life * 1.6); g.fillStyle = p.c; g.beginPath();
+        for (let i = 0; i < 8; i++) { const rr = i % 2 ? p.s * .35 : p.s, a = i * Math.PI / 4; g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+        g.closePath(); g.fill(); g.restore(); return true;
+      });
+      if (live || parts.length) requestAnimationFrame(frame); else g.clearRect(0, 0, cv.width, cv.height);
+    })(performance.now());
+  }
+
+  /* ---------- звук ---------- */
+  let ac = null, master = null;
+  function audio() {
+    if (!ac) { ac = new (window.AudioContext || window.webkitAudioContext)(); master = ac.createGain(); master.connect(ac.destination); }
+    if (ac.state === 'suspended') ac.resume().catch(() => {});
+    master.gain.value = Math.max(0, Math.min(100, Number(cfg.volume) || 0)) / 100 * .6;
+    return ac;
+  }
+  function tone(f, t0, d, type, v) { const o = ac.createOscillator(), gn = ac.createGain(); o.type = type; o.frequency.value = f; gn.gain.setValueAtTime(0.0001, t0); gn.gain.linearRampToValueAtTime(v, t0 + .02); gn.gain.exponentialRampToValueAtTime(0.0001, t0 + d); o.connect(gn); gn.connect(master); o.start(t0); o.stop(t0 + d + .05); }
+  function noise(t0, d, v, type, f) {
+    const n = Math.max(1, Math.floor(ac.sampleRate * d)), buf = ac.createBuffer(1, n, ac.sampleRate), ch = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) ch[i] = Math.random() * 2 - 1;
+    const s = ac.createBufferSource(), fl = ac.createBiquadFilter(), gn = ac.createGain(); s.buffer = buf; fl.type = type; fl.frequency.value = f;
+    gn.gain.setValueAtTime(v, t0); gn.gain.exponentialRampToValueAtTime(0.0001, t0 + d); s.connect(fl); fl.connect(gn); gn.connect(master); s.start(t0);
+  }
+  function playSound() {
+    const k = cfg.sound; if (!k || k === 'none' || !(Number(cfg.volume) > 0)) return;
+    try {
+      if (k === 'custom' || k === 'file') {   // свій звук: посилання або файл, завантажений з комп'ютера (/winner-sound)
+        const url = k === 'file' ? (cfg.soundFile ? '/winner-sound?cat=' + encodeURIComponent(curCat || '') + '&v=' + (cfg.soundVer || 0) : '') : cfg.soundUrl;
+        if (!url) return;
+        const a = new Audio(url); a.volume = Math.max(0, Math.min(1, cfg.volume / 100)); a.play().catch(() => {}); return;
+      }
+      const c = audio(), t = c.currentTime + .03;
+      if (k === 'fanfare') { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, t + i * .13, .22, 'square', .35)); [523.25, 659.25, 783.99, 1046.5].forEach(f => tone(f, t + .58, 1.3, 'sawtooth', .16)); }
+      else if (k === 'chime') { tone(1318.5, t, 1.6, 'sine', .5); tone(3637, t, .8, 'sine', .08); tone(1760, t + .2, 1.8, 'sine', .45); tone(4856, t + .2, .8, 'sine', .07); }
+      else if (k === 'drums') { for (let i = 0; i < 26; i++) noise(t + i * .05, .07, .12 + i * .02, 'bandpass', 220 + i * 6); noise(t + 1.35, 1.4, .6, 'highpass', 3500); tone(120, t + 1.35, .5, 'sine', .6); }
+    } catch {}
+  }
+
+  /* ---------- зв'язок ---------- */
+  function onMsg(m) {
+    if (!m || typeof m !== 'object') return;
+    if (m.type === 'winnerWidget' && m.cfg) {
+      if (!m.cat) { applyCfg(m.cfg); if (PREVIEW) idle(); else if (cur) fill(cur); }   // повідомлення без розіграшу (старий сервер): спільні налаштування
+      else if (CAT) { if (m.cat === CAT) { applyCfg(m.cfg); if (PREVIEW) idle(); else if (cur) fill(cur); } }
+      else cfgs[m.cat] = m.cfg;   // старе універсальне посилання: запам'ятовуємо налаштування кожного розіграшу
+    } else if (m.type === 'winnerShow' && m.winner) {
+      const r = m.winner.raffle || '';
+      if (CAT && r !== CAT) return;   // віджет показує лише переможців свого розіграшу
+      curCat = CAT || r;
+      if (!CAT && cfgs[r]) applyCfg(cfgs[r]);   // без ?cat=: вигляд беремо з налаштувань розіграшу цього переможця
+      show(m.winner);
+    } else if (m.type === 'winnerHide') { if (!CAT || !m.raffle || m.raffle === CAT) hide(); }
+  }
+  applyCfg(cfg);
+  if (PREVIEW) {
+    addEventListener('message', e => {
+      if (e.origin !== location.origin || !e.data) return;
+      if (e.data.type === 'cfg') { applyCfg(e.data.cfg); if (!anim || !cur) idle(); else fill(cur); }
+      else if (e.data.type === 'play') show(e.data.winner || SAMPLE);
+    });
+    idle();
+    try { parent.postMessage({ type: 'wwReady' }, location.origin); } catch {}
+  } else {
+    fetch('/api/winner-widget?cat=' + encodeURIComponent(CAT || 'all')).then(r => r.json()).then(j => { if (CAT) { if (j && j.cfg) applyCfg(j.cfg); } else if (j && j.cfgs) cfgs = j.cfgs; }).catch(() => {});
+    (function connect() {
+      const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+      ws.onmessage = e => { try { onMsg(JSON.parse(e.data)); } catch {} };
+      ws.onclose = () => setTimeout(connect, 2000);
+      ws.onerror = () => { try { ws.close(); } catch {} };
+    })();
+  }
+})();
+</script>
+<script src="/profile-reload.js"></script>
+</body>
+</html>

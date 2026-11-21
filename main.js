@@ -4,15 +4,39 @@ const path = require('path');
 const net = require('net');
 const { execFile, spawn } = require('child_process');
 
-// у зібраній програмі конфіг і accounts.json лежать поруч із MultiChat.exe
+// у зібраній програмі голоси й журнали лежать поруч із MultiChat.exe, а settings.json, ключі, акаунти й налаштування віджетів - у %APPDATA%\MultiChat
 process.env.NO_OPEN = '1';
 process.env.MULTICHAT_DIR = app.isPackaged ? path.dirname(process.execPath) : __dirname;
 process.env.MULTICHAT_ELECTRON = '1';
+// налаштування віджетів і розіграшів лежать у постійній папці користувача (Windows: %APPDATA%\MultiChat), яку нова збірка програми не стирає
+try { process.env.MULTICHAT_USERDATA = path.join(app.getPath('appData'), 'MultiChat'); } catch {}
+
+/* одна папка в %APPDATA%: дані самого Electron (localStorage з налаштуваннями інтерфейсу, сесії входу, кеш) раніше лежали в %APPDATA%\multichat-tts
+   (за назвою пакета), тепер вони теж у %APPDATA%\MultiChat разом із віджетами. Старий вміст переноситься один раз без перезапису наявних файлів,
+   а стару папку видаляємо лише тоді, коли перенесено все без помилок. Має виконатися до готовності програми. */
+try {
+  const fs = require('fs'), appData = app.getPath('appData');
+  const oldDir = path.join(appData, 'multichat-tts'), newDir = path.join(appData, 'MultiChat');
+  if (path.resolve(oldDir).toLowerCase() !== path.resolve(newDir).toLowerCase()) {
+    if (fs.existsSync(oldDir)) {
+      let ok = true;
+      try {
+        fs.mkdirSync(newDir, { recursive: true });
+        fs.cpSync(oldDir, newDir, { recursive: true, force: false, errorOnExist: false, filter: src => !/^(Singleton|lockfile$|LOCK$)/i.test(path.basename(src)) });
+      } catch { ok = false; }
+      if (ok) { try { fs.rmSync(oldDir, { recursive: true, force: true }); } catch {} }
+    }
+    app.setPath('userData', newDir);
+  }
+} catch {}
 
 // налаштування з settings.json (змінюються в інтерфейсі, діють після перезапуску)
 let savedSettings = {};
-try { savedSettings = JSON.parse(require('fs').readFileSync(path.join(process.env.MULTICHAT_DIR, 'settings.json'), 'utf8')) || {}; } catch {}
-const hwAccel = savedSettings.hardwareAcceleration !== false;
+for (const dir of [process.env.MULTICHAT_USERDATA, process.env.MULTICHAT_DIR]) {   // спершу постійна папка (%APPDATA%\MultiChat), потім старе місце поруч із програмою
+  if (!dir) continue;
+  try { savedSettings = JSON.parse(require('fs').readFileSync(path.join(dir, 'settings.json'), 'utf8')) || {}; break; } catch {}
+}
+const hwAccel = savedSettings.hardwareAcceleration === true;   // за замовчуванням апаратне прискорення вимкнено
 if (!hwAccel) app.disableHardwareAcceleration();   // має викликатися до готовності програми
 process.env.MULTICHAT_HWACCEL = hwAccel ? '1' : '0';
 
@@ -87,10 +111,11 @@ function quitApp() {
 function createWindow() {
   win = new BrowserWindow({
     width: 1200, height: 800, minWidth: 700, minHeight: 500,
-    backgroundColor: '#0e0e12', autoHideMenuBar: true, title: 'MultiChat',
+    backgroundColor: '#0e0e12', autoHideMenuBar: false, title: 'MultiChat',
     icon: path.join(__dirname, 'assets', 'icon.ico'),
     webPreferences: { autoplayPolicy: 'no-user-gesture-required', backgroundThrottling: false }
   });
+  win.removeMenu(); win.setMenuBarVisibility(false);
   win.loadURL(`http://localhost:${PORT}`);
 
   // вхід через Google/Twitch відкриваємо в звичайному браузері (Google не пускає вхід у вбудованих вікнах)
@@ -98,7 +123,12 @@ function createWindow() {
     try { const u = new URL(url); return u.hostname !== 'localhost' || u.pathname.startsWith('/auth/'); }
     catch { return true; }
   };
-  win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
+  const openHandler = ({ url }) => {
+    try { const u = new URL(url); if (u.hostname === 'localhost' && u.pathname === '/multi-editor.html') return { action: 'allow', overrideBrowserWindowOptions: { width: 1700, height: 950, minWidth: 800, minHeight: 500, backgroundColor: '#0e0e12', autoHideMenuBar: false, title: 'MultiChat: мульти-віджет', icon: path.join(__dirname, 'assets', 'icon.ico'), webPreferences: { autoplayPolicy: 'no-user-gesture-required', backgroundThrottling: false } } }; } catch {}
+    shell.openExternal(url); return { action: 'deny' };
+  };
+  win.webContents.setWindowOpenHandler(openHandler);
+  win.webContents.on('did-create-window', child => { try { child.removeMenu(); child.setMenuBarVisibility(false); child.webContents.setWindowOpenHandler(openHandler); } catch {} });   // і в окремому вікні редактора немає меню
   win.webContents.on('will-navigate', (e, url) => { if (isExternal(url)) { e.preventDefault(); shell.openExternal(url); } });
   win.on('closed', () => { win = null; quitApp(); });   // закрито головне вікно - програма завершується повністю
 
@@ -134,9 +164,15 @@ async function acquireLock() {
   app.on('window-all-closed', quitApp);
   app.on('before-quit', () => { global.__multichatQuitting = true; });
   await app.whenReady();
+  Menu.setApplicationMenu(null);   // без верхнього меню (File, Edit, View...): Alt його більше не відкриває
+  app.on('web-contents-created', (_e, wc) => wc.on('before-input-event', (e, input) => {
+    if (input.type !== 'keyDown') return;
+    const k = String(input.key || '').toLowerCase();
+    if (k === 'f12' || (input.control && input.shift && k === 'i')) { e.preventDefault(); wc.toggleDevTools(); }
+    else if (k === 'f5' || (input.control && !input.shift && k === 'r')) { e.preventDefault(); wc.reload(); }
+  }));   // меню немає, тож ці клавіші задаємо самі
   if (await handleAdminMode()) { setTimeout(() => app.exit(0), 300); return; }   // запущено копію з правами адміністратора - цю закриваємо
   require('./server.js');
   await waitForPort(PORT);
   createWindow();
 })();
-

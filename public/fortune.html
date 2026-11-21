@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MultiChat - колесо фортуни</title>
+<style>
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif}
+body.preview{background:repeating-conic-gradient(#2b2b36 0 25%,#1d1d26 0 50%) 0 0/24px 24px}
+#stage{position:absolute;inset:0;opacity:1;transform:none;transition:opacity .6s ease,transform .6s cubic-bezier(.22,1,.36,1)}
+#stage.off{opacity:0;transform:scale(.7)}
+#cv{position:absolute;left:0;top:0;width:100%;height:100%}
+#resw{position:absolute;left:0;right:0;display:flex;justify-content:center;pointer-events:none;z-index:5}
+#resw.pos-bottom{bottom:2.5%}
+#resw.pos-top{top:2.5%}
+#resw.pos-center{top:50%;transform:translateY(-50%)}
+#res{max-width:92%;box-sizing:border-box;text-align:center;padding:.3em .9em;font-weight:700;overflow-wrap:anywhere;opacity:0;transition:opacity .35s ease,transform .5s cubic-bezier(.22,1,.36,1);text-shadow:0 2px 6px rgba(0,0,0,.45)}
+#res[data-an="pop"]{transform:scale(.6)}
+#res[data-an="slide"]{transform:translateY(60px)}
+#res[data-an="fade"]{transform:none}
+#res.show{opacity:1;transform:none}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv"></canvas></div>
+<div id="resw" class="pos-bottom"><div id="res" data-an="pop"></div></div>
+<script>
+(() => {
+const q = new URLSearchParams(location.search), PREVIEW = q.get('preview') === '1', PROFILE = q.get('p') || '';
+const $ = id => document.getElementById(id), cv = $('cv'), ctx = cv.getContext('2d'), stage = $('stage'), res = $('res'), resw = $('resw');
+if (PREVIEW) document.body.classList.add('preview');
+const TAU = Math.PI * 2, mod = (a, n) => ((a % n) + n) % n;
+const PAL = {
+  neon: ['#7b5cff', '#22d3ee', '#c026d3', '#3b82f6', '#a855f7', '#06b6d4'],
+  rainbow: ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'],
+  sunset: ['#ff5f6d', '#ff8a5c', '#ffc371', '#f9d423', '#ff6b9d', '#c44569'],
+  ocean: ['#0ea5e9', '#06b6d4', '#14b8a6', '#3b82f6', '#6366f1', '#22d3ee'],
+  candy: ['#ff6fb5', '#ffd166', '#7ee8fa', '#b388ff', '#80ed99', '#ff9aa2'],
+};
+const EASE = { cubic: x => 1 - Math.pow(1 - x, 3), quart: x => 1 - Math.pow(1 - x, 4), quint: x => 1 - Math.pow(1 - x, 5) };
+let cfg = null, pendingCfg = null, myId = '', removed = new Set(), pendingRemoved = null, items = [], act = [], geo = null;
+let W = 0, H = 0, DPR = 1, rot = 0, spin = null, lastIdx = -1, flick = 0, hl = 0, hlTarget = 0, hlIdx = -1, parts = [];
+let resTimer = 0, hideTimer = 0, lastDraw = 0, lastT = 0, lastTick = 0, ac = null;
+
+/* ---- сектори ---- */
+const parseItems = text => String(text || '').split('\n').map(l => l.trim()).filter(Boolean).slice(0, 40).map(l => {   // «Назва | вага | #колір»; той самий розбір, що на сервері
+  const p = l.split('|').map(s => s.trim()), it = { name: p[0] || '', weight: 1, color: '' };
+  for (const s of p.slice(1)) { if (/^#[0-9a-f]{6}$/i.test(s)) it.color = s.toLowerCase(); else { const n = Number(s.replace(',', '.')); if (Number.isFinite(n) && n > 0) it.weight = Math.min(100, n); } }
+  return it;
+}).filter(x => x.name);
+const mix = (a, b) => { const x = parseInt(a.slice(1), 16), y = parseInt(b.slice(1), 16), c = s => Math.round((((x >> s) & 255) + ((y >> s) & 255)) / 2); return '#' + [16, 8, 0].map(s => c(s).toString(16).padStart(2, '0')).join(''); };
+function colorOf(it, i, n) {
+  if (it.color) return it.color;
+  if (cfg.palette === 'two') return n > 2 && n % 2 && i === n - 1 ? mix(cfg.color1, cfg.color2) : (i % 2 ? cfg.color2 : cfg.color1);
+  const p = PAL[cfg.palette] || PAL.neon; let k = i % p.length;
+  if (n > 1 && i === n - 1 && k === 0) k = Math.floor(p.length / 2);   // останній сектор не повторює колір першого
+  return p[k];
+}
+const dark = hex => { const n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255; return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62; };
+function rebuild() {   // активні сектори (без вибулих) і їхні кути; 0 рад - праворуч від центру, далі за годинниковою стрілкою
+  items = parseItems(cfg.items);
+  act = items.map((it, i) => ({ ...it, i })).filter(x => !removed.has(x.i));
+  const w = act.map(x => cfg.useWeight ? x.weight : 1), tot = w.reduce((a, b) => a + b, 0) || 1;
+  let a = 0;
+  act.forEach((x, k) => { x.a0 = a; a += TAU * w[k] / tot; x.a1 = a; x.col = colorOf(x, k, act.length); });
+  lastIdx = -1;
+}
+const PA = () => ({ top: -Math.PI / 2, right: 0, bottom: Math.PI / 2, left: Math.PI }[cfg.pointerPos] ?? -Math.PI / 2);
+const idxAt = phi => { for (let k = 0; k < act.length; k++) if (phi >= act[k].a0 && phi < act[k].a1) return k; return act.length - 1; };
+
+/* ---- звук (синтез, без файлів) ---- */
+function audio() { if (!cfg || !cfg.sound) return null; try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume().catch(() => {}); return ac; } catch { return null; } }
+function tone(a, f0, f1, t, dur, type, vol) { const o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.setValueAtTime(f0, t); if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + dur + 0.02); }
+function tick() { if (!cfg.sound || !cfg.tickSound) return; const a = audio(); if (!a) return; tone(a, 900 + Math.random() * 90, 420, a.currentTime, 0.05, 'triangle', cfg.volume / 100 * 0.35); }
+function fanfare() { if (!cfg.sound || !cfg.winSound) return; const a = audio(); if (!a) return; [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => tone(a, f, f, a.currentTime + i * 0.11, i === 4 ? 0.7 : 0.28, 'triangle', cfg.volume / 100 * 0.3)); }
+
+/* ---- малювання ---- */
+function layout() { W = innerWidth; H = innerHeight; DPR = Math.min(2, devicePixelRatio || 1); cv.width = Math.max(1, Math.round(W * DPR)); cv.height = Math.max(1, Math.round(H * DPR)); }
+function geometry() {
+  const D = Math.min(W, H) * cfg.wheelSize / 100, Ro = D / 2 * 0.9;   // запас під стрілку
+  const cx = cfg.position === 'left' ? Math.min(W / 2, W * 0.02 + D / 2) : cfg.position === 'right' ? Math.max(W / 2, W - W * 0.02 - D / 2) : W / 2;
+  return { cx, cy: H / 2, Ro, u: Ro / 250 };
+}
+function drawPointer(g, P, Rw) {
+  const { cx, cy, Ro, u } = g, ps = Ro * cfg.pointerSize / 100, hw = ps * 0.6, tip = Rw * 0.88, base = Ro + ps * 0.9;
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(P);
+  const pv = Ro + ps * 0.6; ctx.translate(pv, 0); ctx.rotate(-flick * 0.5); ctx.translate(-pv, 0);   // здригання навколо основи
+  ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 8 * u; ctx.shadowOffsetY = 2 * u;
+  ctx.fillStyle = cfg.pointerColor; ctx.strokeStyle = '#0b0b14'; ctx.lineWidth = Math.max(1.5, 3 * u); ctx.lineJoin = 'round';
+  ctx.beginPath();
+  if (cfg.pointerStyle === 'arrow') { const hb = tip + ps * 1.1; ctx.moveTo(tip, 0); ctx.lineTo(hb, -hw * 1.1); ctx.lineTo(hb, -hw * 0.4); ctx.lineTo(base, -hw * 0.4); ctx.lineTo(base, hw * 0.4); ctx.lineTo(hb, hw * 0.4); ctx.lineTo(hb, hw * 1.1); }
+  else if (cfg.pointerStyle === 'pin') { const r = hw * 0.95, c = base - r * 0.2; ctx.moveTo(tip, 0); ctx.lineTo(c - r * 0.8, -r * 0.62); ctx.arc(c, 0, r, Math.PI + 0.65, Math.PI - 0.65, false); }
+  else { ctx.moveTo(tip, 0); ctx.lineTo(base, -hw); ctx.lineTo(base, hw); }
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  if (cfg.pointerStyle === 'pin') { ctx.shadowColor = 'transparent'; ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(base - hw * 0.2, 0, hw * 0.3, 0, TAU); ctx.fill(); }
+  ctx.restore();
+}
+function drawText(g, x, Rw, hubR, now) {
+  const { cx, cy, u } = g, n = act.length, fam = `"${String(cfg.font || 'Segoe UI').replace(/["\\]/g, '')}", "Segoe UI", system-ui, sans-serif`;
+  const rim = cfg.textAlign !== 'center', inset = Rw * cfg.textInset / 100;
+  const xEnd = rim ? Rw - inset : Rw * 0.9, xStart = hubR + 8 * u, L = Math.max(10, xEnd - xStart);
+  let name = x.name; if (cfg.textCase === 'upper') name = name.toUpperCase(); else if (cfg.textCase === 'lower') name = name.toLowerCase();
+  const sweep = x.a1 - x.a0, mid = (x.a0 + x.a1) / 2 + rot, ref = rim ? xEnd - L * 0.4 : xStart + L * 0.4;
+  let fs = Math.min(cfg.fontSize * u, 2 * ref * Math.sin(Math.min(sweep, Math.PI) / 2) * 0.82);
+  fs = Math.max(fs, 6);
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(mid);
+  ctx.font = `${cfg.bold ? 700 : 400} ${fs}px ${fam}`; ctx.textBaseline = 'middle';
+  let w = ctx.measureText(name).width;
+  if (w > L) { fs = Math.max(6, fs * L / w); ctx.font = `${cfg.bold ? 700 : 400} ${fs}px ${fam}`; w = ctx.measureText(name).width; }
+  if (w > L) { while (name.length > 1 && ctx.measureText(name + '…').width > L) name = name.slice(0, -1); name += '…'; }
+  ctx.textAlign = rim ? 'right' : 'left';
+  const tx = rim ? xEnd : xStart;
+  if (cfg.textOutline > 0) { ctx.lineWidth = cfg.textOutline * 2 * Math.max(.5, u * 2); ctx.strokeStyle = cfg.outlineColor; ctx.lineJoin = 'round'; ctx.strokeText(name, tx, 0); }
+  ctx.fillStyle = cfg.textAuto ? (dark(x.col) ? '#111118' : '#ffffff') : cfg.textColor; ctx.fillText(name, tx, 0);
+  ctx.restore();
+}
+function drawConfetti(dt) {
+  parts = parts.filter(p => p.life > 0);
+  for (const p of parts) {
+    p.vy += 900 * dt; p.vx *= 1 - 0.4 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt; p.life -= dt;
+    ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, p.life)); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.s / 2, -p.s / 3, p.s, p.s * 0.6); ctx.restore();
+  }
+}
+function boom(g) {
+  const cols = ['#ff5f6d', '#ffd166', '#22d3ee', '#7b5cff', '#80ed99', '#ff6fb5', '#ffffff'], P = PA();
+  for (let i = 0; i < 150; i++) { const a = P + (Math.random() - 0.5) * 2.4, sp = 300 + Math.random() * 700; parts.push({ x: g.cx + Math.cos(P) * g.Ro * 0.4, y: g.cy + Math.sin(P) * g.Ro * 0.4, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 200, r: Math.random() * TAU, vr: (Math.random() - 0.5) * 14, s: 8 + Math.random() * 10, c: cols[i % cols.length], life: 2.2 + Math.random() * 1.6 }); }
+}
+function draw(now) {
+  const dt = Math.min(0.1, (now - (lastT || now)) / 1000); lastT = now;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, W, H);
+  if (!cfg) return;
+  /* рух */
+  if (spin) {
+    const x = Math.min(1, (now - spin.t0) / spin.dur); rot = spin.from + (spin.to - spin.from) * (EASE[cfg.easing] || EASE.quart)(x);
+    if (x >= 1) endSpin();
+  } else if (cfg.idleRotate && hl <= 0.001 && act.length) rot += cfg.idleSpeed * Math.PI / 180 * dt;
+  hl += Math.sign(hlTarget - hl) * Math.min(Math.abs(hlTarget - hl), dt * 3);
+  flick = Math.max(0, flick - dt * 7);
+  const g = geo = geometry(), { cx, cy, Ro, u } = g, bw = cfg.borderWidth * u, Rw = Ro - bw, P = PA();
+  if (stage.classList.contains('off') && !PREVIEW) return;
+  const n = act.length;
+  if (n) {   // клацання, коли стрілка переходить на інший сектор
+    const k = idxAt(mod(P - rot, TAU));
+    if (k !== lastIdx) { if (lastIdx >= 0 && spin) { tick(); flick = 1; } lastIdx = k; }
+  }
+  /* тінь і основа */
+  if (cfg.shadow) { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 30 * u; ctx.shadowOffsetY = 10 * u; ctx.fillStyle = cfg.borderWidth > 0 ? cfg.borderColor : '#1c1c28'; ctx.beginPath(); ctx.arc(cx, cy, Ro, 0, TAU); ctx.fill(); ctx.restore(); }
+  /* сектори */
+  if (!n) {
+    ctx.save(); ctx.fillStyle = 'rgba(20,20,30,.85)'; ctx.beginPath(); ctx.arc(cx, cy, Rw, 0, TAU); ctx.fill(); ctx.fillStyle = '#c8c8d2'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `600 ${Math.max(14, 30 * u)}px "Segoe UI",sans-serif`;
+    ctx.fillText(items.length ? 'Усі сектори вибули' : 'Додай сектори колеса', cx, cy); ctx.restore();
+  } else {
+    act.forEach((x, k) => {
+      ctx.globalAlpha = hl > 0 && k !== hlIdx ? 1 - 0.65 * hl : 1;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, Rw, x.a0 + rot, x.a1 + rot); ctx.closePath(); ctx.fillStyle = x.col; ctx.fill();
+      if (cfg.segLine > 0 && n > 1) { ctx.lineWidth = cfg.segLine * u * 2; ctx.strokeStyle = cfg.segLineColor; ctx.lineJoin = 'round'; ctx.stroke(); }
+    });
+    ctx.globalAlpha = 1;
+    if (hl > 0 && hlIdx >= 0 && act[hlIdx]) { const x = act[hlIdx]; ctx.save(); ctx.globalAlpha = hl * (0.18 + 0.14 * Math.sin(now / 170)); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, Rw, x.a0 + rot, x.a1 + rot); ctx.closePath(); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.restore(); }
+    const hubR = Rw * cfg.hubSize / 100;
+    act.forEach((x, k) => { ctx.globalAlpha = hl > 0 && k !== hlIdx ? 1 - 0.5 * hl : 1; drawText(g, x, Rw, hubR, now); });
+    ctx.globalAlpha = 1;
+  }
+  /* обідок і лампочки */
+  if (bw > 0) {
+    ctx.save(); ctx.lineWidth = bw; ctx.strokeStyle = cfg.borderColor; ctx.beginPath(); ctx.arc(cx, cy, Ro - bw / 2, 0, TAU); ctx.stroke(); ctx.restore();
+    if (cfg.lights) {
+      const N = cfg.lightCount, r = Math.max(2 * u, bw * 0.24), phase = spin ? Math.floor(now / 110) : Math.floor(now / 600);
+      for (let k = 0; k < N; k++) { const a = k * TAU / N, on = (k + phase) % 2 === 0; ctx.beginPath(); ctx.arc(cx + Math.cos(a) * (Ro - bw / 2), cy + Math.sin(a) * (Ro - bw / 2), r, 0, TAU); ctx.fillStyle = on ? cfg.lightColor : 'rgba(255,255,255,.22)'; if (on) { ctx.shadowColor = cfg.lightColor; ctx.shadowBlur = 8 * u; } ctx.fill(); ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; }
+    }
+  }
+  /* центр */
+  const hubR2 = Rw * cfg.hubSize / 100;
+  if (hubR2 > 0) { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 8 * u; ctx.beginPath(); ctx.arc(cx, cy, hubR2, 0, TAU); ctx.fillStyle = cfg.hubColor; ctx.fill(); ctx.shadowBlur = 0; ctx.lineWidth = Math.max(1.5, 3 * u); ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.stroke(); ctx.restore(); }
+  drawPointer(g, P, Rw);
+  if (parts.length) drawConfetti(dt);
+}
+function frame(now) {
+  requestAnimationFrame(frame);
+  const busy = spin || hl !== hlTarget || hl > 0 || parts.length || flick > 0.01 || (cfg && cfg.idleRotate);
+  if (!busy && now - lastDraw < 250) return;   // у спокої перемальовуємо рідко (лампочки)
+  lastDraw = now; draw(now);
+}
+
+/* ---- крутіння ---- */
+function startSpin(m) {
+  if (!cfg || spin) return;
+  if (pendingCfg) { cfg = pendingCfg; pendingCfg = null; }
+  if (Array.isArray(m.removed)) removed = new Set(m.removed);
+  pendingRemoved = null; rebuild();
+  const pos = act.findIndex(x => x.i === m.pick); if (pos < 0) return;
+  clearTimeout(resTimer); clearTimeout(hideTimer); hideResult(true); hlTarget = 0; hl = 0; hlIdx = -1;
+  stage.classList.remove('off'); audio();
+  const x = act[pos], P = PA(), target = x.a0 + Math.min(0.95, Math.max(0.05, m.offset == null ? 0.5 : m.offset)) * (x.a1 - x.a0);
+  const delta = mod(P - target - rot, TAU), turns = cfg.minTurns + (m.extra || 0);
+  spin = { from: rot, to: rot + delta + TAU * turns, t0: performance.now(), dur: cfg.spinSec * 1000, pos };
+  lastIdx = idxAt(mod(P - rot, TAU));
+}
+function endSpin() {
+  const s = spin; spin = null; rot = mod(s.to, TAU); lastIdx = -1;
+  const x = act[s.pos]; if (!x) return;
+  if (cfg.highlight) { hlIdx = s.pos; hlTarget = 1; }
+  showResult(x.name); fanfare(); if (cfg.confetti && geo) boom(geo);
+  if (cfg.resultSec > 0) resTimer = setTimeout(clearResult, cfg.resultSec * 1000);
+  if (!PREVIEW && cfg.showMode === 'onSpin') hideTimer = setTimeout(() => { stage.classList.add('off'); clearResult(); }, cfg.hideSec * 1000);
+  if (pendingCfg) { const c = pendingCfg; pendingCfg = null; applyCfg(c, true); }
+}
+function showResult(name) {
+  if (!cfg.showResult) return;
+  const st = res.style, bg = (() => { const n = parseInt(cfg.resultBg.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${cfg.resultBgOpacity / 100})`; })();
+  st.fontFamily = `"${String(cfg.font || 'Segoe UI').replace(/["\\]/g, '')}", "Segoe UI", system-ui, sans-serif`; st.fontSize = cfg.resultSize + 'px'; st.color = cfg.resultColor; st.background = bg; st.borderRadius = cfg.resultRadius + 'px';
+  res.textContent = String(cfg.resultFormat || '{name}').split('{name}').join(name);
+  res.dataset.an = cfg.resultAnim; resw.className = 'pos-' + cfg.resultPos;
+  void res.offsetWidth; res.classList.add('show');
+}
+function hideResult(now) { res.classList.remove('show'); }
+function clearResult() {   // напис і підсвітка гаснуть; тепер можна показати новий склад колеса (якщо вибулі змінилися)
+  hideResult(); hlTarget = 0;
+  if (pendingRemoved) { const r = pendingRemoved; pendingRemoved = null; setTimeout(() => { if (!spin) { removed = new Set(r); rebuild(); hlIdx = -1; } }, 400); }
+}
+function applyState(m) {
+  const r = Array.isArray(m.removed) ? m.removed : [];
+  if (spin || (!m.reset && (hl > 0 || res.classList.contains('show')))) { pendingRemoved = r; return; }
+  removed = new Set(r); pendingRemoved = null; if (cfg) { rebuild(); hlIdx = -1; hlTarget = 0; hl = 0; }
+}
+function applyCfg(c, force) {
+  if (spin && !force) { pendingCfg = c; return; }
+  const first = !cfg; cfg = c; rebuild();
+  if (PREVIEW) stage.classList.remove('off'); else if (c.showMode === 'always') stage.classList.remove('off'); else if (first) stage.classList.add('off');
+  resw.className = 'pos-' + c.resultPos;
+}
+function resetView() { clearTimeout(resTimer); clearTimeout(hideTimer); spin = null; hideResult(); hl = 0; hlTarget = 0; hlIdx = -1; parts = []; rot = 0; removed = new Set(); pendingRemoved = null; if (cfg) rebuild(); }
+function localSpin() {   // пробне обертання в перегляді (нічого не відправляє в OBS)
+  if (!cfg || spin) return;
+  const list = parseItems(cfg.items).map((it, i) => ({ ...it, i })).filter(x => !removed.has(x.i)); if (!list.length) return;
+  const w = list.map(x => cfg.useWeight ? x.weight : 1), tot = w.reduce((a, b) => a + b, 0); let r = Math.random() * tot, k = 0;
+  for (; k < list.length - 1; k++) { if (r < w[k]) break; r -= w[k]; }
+  startSpin({ pick: list[k].i, offset: 0.15 + Math.random() * 0.7, extra: Math.floor(Math.random() * 3), removed: [...removed] });
+}
+addEventListener('resize', layout); layout();
+requestAnimationFrame(frame);
+if (PREVIEW) {
+  addEventListener('message', e => {
+    if (e.origin !== location.origin || !e.data) return;
+    if (e.data.type === 'cfg') applyCfg(e.data.cfg);
+    else if (e.data.type === 'spin') localSpin();
+    else if (e.data.type === 'restart') resetView();
+  });
+  fetch('/api/fortune?p=' + encodeURIComponent(PROFILE)).then(r => r.json()).then(j => { if (j && j.cfg) { myId = j.id || ''; applyCfg(j.cfg); } try { parent.postMessage({ type: 'ftReady' }, location.origin); } catch {} }).catch(() => {});
+} else {
+  fetch('/api/fortune?p=' + encodeURIComponent(PROFILE)).then(r => r.json()).then(j => { if (j && j.cfg) { myId = j.id || ''; removed = new Set((j.state && j.state.removed) || []); applyCfg(j.cfg); } }).catch(() => {});
+  (function connect() {
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.onmessage = e => { try {
+      const m = JSON.parse(e.data); if (!m || (m.id && myId && m.id !== myId)) return;
+      if (m.type === 'fortune' && m.cfg) applyCfg(m.cfg);
+      else if (m.type === 'fortuneSpin') startSpin(m);
+      else if (m.type === 'fortuneState') applyState(m);
+    } catch {} };
+    ws.onclose = () => setTimeout(connect, 2000);
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  })();
+}
+})();
+</script>
+<script src="/profile-reload.js"></script>
+</body>
+</html>

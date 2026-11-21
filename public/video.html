@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MultiChat - відео</title>
+<style>
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif}
+body.preview{background:repeating-conic-gradient(#2b2b36 0 25%,#1d1d26 0 50%) 0 0/24px 24px}
+#box{position:absolute;box-sizing:border-box;overflow:hidden;width:var(--aw);height:var(--ah);left:var(--bl);top:var(--bt);
+  background:var(--bg);border-radius:var(--rad);border:var(--bw) solid var(--bc);box-shadow:var(--bsh);
+  opacity:1;transform:none;transition:opacity var(--tm) ease,transform var(--tm) cubic-bezier(.22,1,.36,1)}
+#box.an-none{transition:none}
+#box.off{opacity:0;pointer-events:none}
+#box.off.an-zoom{transform:scale(.85)}
+#box.off.an-slide{transform:translateY(40px)}
+#v{position:absolute;left:0;top:0;width:100%;height:100%;display:block;background:transparent;object-fit:var(--fit);opacity:var(--io)}
+#hint{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;color:#c9c9d6;font-size:20px;display:none;padding:0 20px}
+body.preview #hint.on{display:block}
+</style>
+</head>
+<body>
+<div id="box" class="off"><video id="v" playsinline disablepictureinpicture preload="auto"></video></div>
+<div id="hint"></div>
+<script>
+(() => {
+const q = new URLSearchParams(location.search), PREVIEW = q.get('preview') === '1', PROFILE = q.get('p') || '';
+const box = document.getElementById('box'), v = document.getElementById('v'), hint = document.getElementById('hint');
+if (PREVIEW) document.body.classList.add('preview');
+let cfg = null, pid = '', myId = '', list = [], cur = -1, curId = '', queue = [], hist = [], idle = true, fails = 0, token = 0, lastSig = '';
+let visTimer = null, visShown = true, fading = false, obsVisible = null, previewSound = false, ended = false;
+const holds = new Set();
+const rgba = (hex, a) => { const n = parseInt(String(hex).slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+const idOk = s => /^[a-z0-9]{1,16}$/.test(String(s || ''));
+const urlOf = it => `/video-file/${encodeURIComponent(pid)}/${encodeURIComponent(it.id)}?v=${Number(it.ver) || 0}`;
+const enabled = () => (cfg && Array.isArray(cfg.videos) ? cfg.videos : []).filter(i => i && idOk(i.id) && i.on !== false);
+const say = t => { hint.textContent = t || ''; hint.classList.toggle('on', !!t); };
+
+/* ---------- вигляд ---------- */
+function applyStyle(c) {
+  const st = box.style;
+  st.setProperty('--aw', c.areaW + '%'); st.setProperty('--ah', c.areaH + '%');
+  const h = c.pos[1], vv = c.pos[0];   // перша літера позиції - вертикаль (t/c/b), друга - горизонталь (l/c/r)
+  st.setProperty('--bl', h === 'l' ? c.marginX + 'px' : h === 'r' ? `calc(100% - ${c.areaW}% - ${c.marginX}px)` : `calc((100% - ${c.areaW}%) / 2)`);
+  st.setProperty('--bt', vv === 't' ? c.marginY + 'px' : vv === 'b' ? `calc(100% - ${c.areaH}% - ${c.marginY}px)` : `calc((100% - ${c.areaH}%) / 2)`);
+  st.setProperty('--bg', rgba(c.bgColor, c.bgOpacity / 100)); st.setProperty('--rad', c.radius + 'px');
+  st.setProperty('--bw', c.borderWidth + 'px'); st.setProperty('--bc', c.borderColor); st.setProperty('--bsh', c.shadow ? '0 6px 22px rgba(0,0,0,.5)' : 'none');
+  st.setProperty('--fit', c.fit); st.setProperty('--io', c.opacity / 100); st.setProperty('--tm', c.transMs + 'ms');
+  box.classList.remove('an-none', 'an-fade', 'an-zoom', 'an-slide'); box.classList.add('an-' + c.anim);
+  applySound();
+}
+function applySound() {
+  if (!cfg) return;
+  v.muted = PREVIEW ? !previewSound : !!cfg.muted;   // у перегляді в програмі звук вимкнено, доки його не ввімкнуть кнопкою
+  v.volume = Math.min(1, Math.max(0, (Number(cfg.volume) || 0) / 100));
+  v.playbackRate = Math.min(2, Math.max(.25, (Number(cfg.rate) || 100) / 100));
+  v.loop = cfg.repeat === 'one' || (cfg.repeat === 'all' && list.length === 1);   // одне відео по колу крутиться самим браузером, без перезавантаження
+}
+function refreshBox() { box.classList.toggle('off', idle || !visShown || fading || !list.length); }
+
+/* ---------- пауза з різних причин ---------- */
+function hold(reason) { if (holds.has(reason)) return; holds.add(reason); try { v.pause(); } catch {} }
+function release(reason) { if (!holds.delete(reason) || holds.size || idle) return; v.play().catch(() => {}); }
+function updateHidden() {   // не видно в OBS: відео стоїть, щоб не декодувалось даремно
+  const hide = cfg && cfg.pauseHidden && !PREVIEW && (obsVisible === false || document.hidden);
+  if (hide) hold('hidden'); else release('hidden');
+}
+
+/* ---------- черга ---------- */
+function shuffled(n, avoid) {
+  const a = [...Array(n).keys()];
+  for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  if (n > 1 && a[0] === avoid) { const k = 1 + Math.floor(Math.random() * (n - 1)); [a[0], a[k]] = [a[k], a[0]]; }
+  return a;
+}
+function pickNext() {   // { i, wrapped }: номер наступного відео й чи почалось нове коло
+  const n = list.length;
+  if (cfg.order === 'random') { let i = Math.floor(Math.random() * n); if (n > 1 && i === cur) i = (i + 1 + Math.floor(Math.random() * (n - 1))) % n; return { i, wrapped: false }; }
+  if (cfg.order === 'shuffle') { let wrapped = false; if (!queue.length) { queue = shuffled(n, cur); wrapped = cur >= 0; } return { i: queue.shift(), wrapped }; }
+  const i = (cur + 1) % n; return { i, wrapped: cur >= 0 && i === 0 };
+}
+
+/* ---------- відтворення ---------- */
+function playAt(i, o) {
+  o = o || {};
+  const it = list[i]; if (!it) return;
+  const my = ++token;
+  cur = i; curId = it.id;
+  if (!o.noPush) { hist.push(i); if (hist.length > 60) hist.shift(); }
+  const go = () => {
+    if (my !== token) return;
+    say('');
+    v.src = urlOf(it); applySound();
+    if (!holds.size) v.play().catch(() => {});
+  };
+  const t = cfg.anim === 'none' ? 0 : Number(cfg.transMs) || 0;
+  if (o.first || o.instant || !t) { fading = false; refreshBox(); go(); return; }
+  if (!fading) { fading = true; refreshBox(); setTimeout(go, t); } else go();   // плавно гаснемо, потім міняємо файл
+}
+function start() {   // починає список з початку (або з випадкового відео)
+  idle = false; ended = false; fails = 0; queue = []; hist = []; cur = -1; curId = '';
+  if (!list.length) { refreshBox(); return; }
+  let first = 0;
+  if (cfg.order !== 'seq') { first = Math.floor(Math.random() * list.length); if (cfg.order === 'shuffle') queue = shuffled(list.length, first).filter(x => x !== first); }
+  playAt(first, { first: true });
+}
+function finish() {   // список закінчився (повтор вимкнено)
+  ended = true;
+  if (cfg.afterEnd === 'hide') { idle = true; refreshBox(); }
+}
+function advance() {
+  if (!cfg || !list.length || idle) return;
+  const r = pickNext();
+  if (r.wrapped && cfg.repeat === 'none') { finish(); return; }
+  playAt(r.i);
+}
+function go(dir) {   // ручне перемикання з програми
+  if (!cfg || !list.length) return;
+  if (idle) { start(); return; }
+  ended = false;
+  if (dir < 0) { if (hist.length > 1) { hist.pop(); playAt(hist[hist.length - 1], { noPush: true }); } else playAt((cur - 1 + list.length) % list.length); return; }
+  const r = pickNext(); playAt(r.i);
+}
+v.addEventListener('playing', () => { fails = 0; if (fading) { fading = false; refreshBox(); } });
+v.addEventListener('ended', () => advance());
+v.addEventListener('error', () => {
+  if (!v.getAttribute('src')) return;
+  fails++;
+  if (fails >= Math.max(1, list.length)) { say('Цей файл не вдалося відтворити. Конвертуй відео в MP4 (H.264) або WebM.'); fading = false; refreshBox(); return; }
+  advance();
+});
+v.addEventListener('timeupdate', () => {   // за мить до кінця починаємо плавно гаснути
+  if (!cfg || cfg.anim === 'none' || fading || v.loop || !Number.isFinite(v.duration)) return;
+  const t = (Number(cfg.transMs) || 0) / 1000, lastHides = cfg.repeat === 'none' && cfg.afterEnd === 'hide';
+  if (v.duration > t * 2 && v.duration - v.currentTime <= t && (list.length > 1 || lastHides)) { fading = true; refreshBox(); }
+});
+
+/* ---------- періодичний показ ---------- */
+function setupPeriodic() {
+  clearTimeout(visTimer); visShown = true; release('vis'); refreshBox();
+  if (!cfg || PREVIEW || !cfg.periodic) return;
+  const step = show => { visShown = show; refreshBox(); if (show) release('vis'); else hold('vis'); visTimer = setTimeout(() => step(!show), (show ? cfg.onSec : cfg.offSec) * 1000); };
+  visTimer = setTimeout(() => step(false), cfg.onSec * 1000);
+}
+
+/* ---------- налаштування й команди ---------- */
+const sigOf = l => l.map(i => [i.id, i.ver].join(':')).join('|');
+function restart(explicit) {
+  token++; queue = []; hist = []; cur = -1; curId = ''; ended = false; fails = 0; fading = false;
+  try { v.pause(); v.removeAttribute('src'); v.load(); } catch {}
+  say(!list.length ? 'Додай відео в списку ліворуч' : '');
+  if (!list.length) { idle = true; refreshBox(); return; }
+  if (explicit || cfg.autoStart) start(); else { idle = true; refreshBox(); if (PREVIEW) say('Відео стартує за командою: натисни «Запустити в OBS»'); }
+}
+function applyCfg(c, pidIn) {
+  const prevId = curId, prevSig = lastSig;
+  cfg = c; if (pidIn) pid = pidIn;
+  list = enabled();
+  applyStyle(c);
+  const sig = sigOf(list);
+  lastSig = sig;
+  const idx = prevId ? list.findIndex(i => i.id === prevId) : -1;
+  if (idx >= 0 && !idle) { cur = idx; if (sig !== prevSig) { queue = []; hist = [idx]; } refreshBox(); }   // вже грає це відео: не перезапускаємо
+  else if (idle && list.length && prevSig === sig && !ended) { refreshBox(); }   // чекає на команду «Запустити»: налаштування його не запускають
+  else restart(false);
+  setupPeriodic(); updateHidden();
+}
+function ctl(cmd) {
+  if (!cfg) return;
+  if (cmd === 'next') go(1);
+  else if (cmd === 'prev') go(-1);
+  else if (cmd === 'pause') hold('user');
+  else if (cmd === 'play') { if (idle || ended) { holds.delete('user'); start(); } else release('user'); }
+  else if (cmd === 'toggle') { if (idle) { holds.delete('user'); start(); } else (holds.has('user') ? release : hold)('user'); }
+  else if (cmd === 'restart') { holds.delete('user'); box.classList.remove('off'); restart(true); setupPeriodic(); }
+}
+const load = () => fetch('/api/video?p=' + encodeURIComponent(PROFILE)).then(r => r.json());
+window.addEventListener('obsSourceVisibleChanged', e => { obsVisible = !!(e && e.detail && e.detail.visible); updateHidden(); });
+document.addEventListener('visibilitychange', updateHidden);
+if (PREVIEW) {
+  addEventListener('message', e => {
+    if (e.origin !== location.origin || !e.data) return;
+    if (e.data.type === 'cfg' && e.data.cfg) applyCfg(e.data.cfg, idOk(e.data.pid) ? e.data.pid : '');
+    else if (e.data.type === 'restart') ctl('restart');
+    else if (e.data.type === 'ctl') ctl(String(e.data.cmd || ''));
+    else if (e.data.type === 'previewSound') { previewSound = !!e.data.on; applySound(); }
+  });
+  load().then(j => { if (j && j.cfg) { myId = pid = j.id || ''; applyCfg(j.cfg, pid); } try { parent.postMessage({ type: 'vdReady' }, location.origin); } catch {} }).catch(() => {});
+} else {
+  load().then(j => { if (j && j.cfg) { myId = pid = j.id || ''; applyCfg(j.cfg, pid); } }).catch(() => {});
+  (function connect() {
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.onmessage = e => {
+      try {
+        const m = JSON.parse(e.data); if (!m) return;
+        if (m.type === 'video' && m.cfg && (!m.id || m.id === myId)) applyCfg(m.cfg, myId);
+        else if (m.type === 'videoCtl' && (!m.id || m.id === myId)) ctl(String(m.cmd || ''));
+      } catch {}
+    };
+    ws.onclose = () => setTimeout(connect, 2000);
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  })();
+}
+})();
+</script>
+<script src="/profile-reload.js"></script>
+</body>
+</html>

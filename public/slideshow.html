@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MultiChat - картинки, що змінюються</title>
+<style>
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif}
+body.preview{background:repeating-conic-gradient(#2b2b36 0 25%,#1d1d26 0 50%) 0 0/24px 24px}
+#box{position:absolute;box-sizing:border-box;overflow:hidden;width:var(--aw);height:var(--ah);left:var(--bl);top:var(--bt);
+  background:var(--bg);border-radius:var(--rad);border:var(--bw) solid var(--bc);box-shadow:var(--bsh);
+  opacity:1;transform:none;transition:opacity .6s ease,transform .6s cubic-bezier(.22,1,.36,1)}
+#box.va-none{transition:none}
+#box.off{opacity:0;pointer-events:none}
+#box.off.va-zoom{transform:scale(.8)}
+#box.off.va-slide{transform:translateY(40px)}
+#stage{position:absolute;left:var(--pad);top:var(--pad);right:var(--pad);bottom:var(--pad);overflow:hidden;perspective:1400px}
+.lay{position:absolute;left:0;top:0;width:100%;height:100%;backface-visibility:hidden;will-change:transform,opacity}
+.lay img{display:block;width:100%;height:100%;object-fit:var(--fit);opacity:var(--io)}
+#cap{position:absolute;left:0;right:0;box-sizing:border-box;padding:.35em .8em;text-align:center;z-index:5;display:none;
+  background:var(--cbg);color:var(--cc);font-family:var(--font);font-size:var(--cs);font-weight:var(--cw);text-shadow:var(--cts);line-height:1.25;
+  transition:opacity .3s ease}
+#cap.on{display:block}
+#cap.top{top:0}#cap.bottom{bottom:0}
+#dots{position:absolute;left:0;right:0;z-index:6;display:none;justify-content:center;gap:8px;pointer-events:none}
+#dots.on{display:flex}
+#dots .d{width:10px;height:10px;border-radius:50%;background:var(--dc);opacity:.35;transition:opacity .3s ease,transform .3s ease;box-shadow:0 0 3px rgba(0,0,0,.5)}
+#dots .d.cur{opacity:1;transform:scale(1.25)}
+#prog{position:absolute;left:0;right:0;height:var(--ph);z-index:7;display:none;background:rgba(0,0,0,.18)}
+#prog.on{display:block}
+#prog.top{top:0}#prog.bottom{bottom:0}
+#prog i{display:block;height:100%;width:0;background:var(--pc)}
+#hint{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;color:#c9c9d6;font-size:20px;display:none;padding:0 20px}
+body.preview #hint.on{display:block}
+</style>
+</head>
+<body>
+<div id="box"><div id="stage"></div><div id="cap"></div><div id="dots"></div><div id="prog"><i></i></div></div>
+<div id="hint">Додай картинки в списку ліворуч</div>
+<script>
+(() => {
+const q = new URLSearchParams(location.search), PREVIEW = q.get('preview') === '1', PROFILE = q.get('p') || '';
+const box = document.getElementById('box'), stage = document.getElementById('stage'), cap = document.getElementById('cap'), dotsEl = document.getElementById('dots'), prog = document.getElementById('prog'), progI = prog.querySelector('i'), hint = document.getElementById('hint');
+if (PREVIEW) document.body.classList.add('preview');
+let cfg = null, pid = '', myId = '', list = [], cur = -1, curId = '', queue = [], hist = [], ended = false, fails = 0;
+let timer = null, visTimer = null, slideStart = 0, slideDur = 0, remaining = 0, token = 0, lastSig = '';
+let layers = [], progAnim = null, kenAnim = null;
+const holds = new Set();
+const cache = new Map();
+const rgba = (hex, a) => { const n = parseInt(String(hex).slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+const idOk = s => /^[a-z0-9]{1,16}$/.test(String(s || ''));
+const urlOf = im => `/slideshow-img/${encodeURIComponent(pid)}/${encodeURIComponent(im.id)}?v=${Number(im.ver) || 0}`;
+const enabled = () => (cfg && Array.isArray(cfg.images) ? cfg.images : []).filter(i => i && idOk(i.id) && i.on !== false);
+
+/* ---------- вигляд ---------- */
+function applyStyle(c) {
+  const st = box.style, f = String(c.font || 'Segoe UI').replace(/["\\]/g, '');
+  st.setProperty('--aw', c.areaW + '%'); st.setProperty('--ah', c.areaH + '%');
+  const h = c.pos[1], v = c.pos[0];   // позиція: перша літера - вертикаль (t/c/b), друга - горизонталь (l/c/r)
+  st.setProperty('--bl', h === 'l' ? c.marginX + 'px' : h === 'r' ? `calc(100% - ${c.areaW}% - ${c.marginX}px)` : `calc((100% - ${c.areaW}%) / 2)`);
+  st.setProperty('--bt', v === 't' ? c.marginY + 'px' : v === 'b' ? `calc(100% - ${c.areaH}% - ${c.marginY}px)` : `calc((100% - ${c.areaH}%) / 2)`);
+  st.setProperty('--bg', rgba(c.bgColor, c.bgOpacity / 100)); st.setProperty('--rad', c.radius + 'px');
+  st.setProperty('--bw', c.borderWidth + 'px'); st.setProperty('--bc', c.borderColor); st.setProperty('--bsh', c.shadow ? '0 6px 22px rgba(0,0,0,.5)' : 'none');
+  st.setProperty('--pad', c.pad + 'px'); st.setProperty('--fit', c.fit); st.setProperty('--io', c.imgOpacity / 100);
+  st.setProperty('--font', `"${f}", "Segoe UI", system-ui, sans-serif`); st.setProperty('--cs', c.captionSize + 'px'); st.setProperty('--cc', c.captionColor);
+  st.setProperty('--cbg', rgba(c.captionBg, c.captionBgOpacity / 100)); st.setProperty('--cw', c.captionBold ? '700' : '400');
+  st.setProperty('--cts', c.captionShadow ? '0 2px 5px rgba(0,0,0,.8)' : 'none');
+  st.setProperty('--dc', c.dotsColor); st.setProperty('--pc', c.progressColor); st.setProperty('--ph', c.progressH + 'px');
+  box.className = box.classList.contains('off') ? 'off va-' + c.visAnim : 'va-' + c.visAnim;
+  cap.classList.toggle('top', c.captionPos === 'top'); cap.classList.toggle('bottom', c.captionPos !== 'top');
+  prog.classList.toggle('on', !!c.progress); prog.classList.toggle('top', c.progressPos === 'top'); prog.classList.toggle('bottom', c.progressPos !== 'top');
+  dotsEl.classList.toggle('on', !!c.dots);
+  layoutOverlays();
+}
+function layoutOverlays() {   // крапки не перекривають підпис і смужку з того самого боку
+  if (!cfg) return;
+  const same = cfg.captionPos === cfg.dotsPos && cap.classList.contains('on') ? cap.offsetHeight : 0;
+  const pr = cfg.progress && cfg.progressPos === cfg.dotsPos ? cfg.progressH : 0;
+  const off = 10 + same + pr;
+  dotsEl.style.top = cfg.dotsPos === 'top' ? off + 'px' : 'auto'; dotsEl.style.bottom = cfg.dotsPos === 'top' ? 'auto' : off + 'px';
+}
+function renderDots() {
+  dotsEl.replaceChildren();
+  if (!cfg || !cfg.dots) return;
+  list.forEach((im, i) => { const d = document.createElement('span'); d.className = 'd' + (i === cur ? ' cur' : ''); dotsEl.append(d); });
+}
+function setCaption(im, animate) {
+  const t = cfg && cfg.showCaption && im && im.caption ? String(im.caption) : '';
+  if (!t) { cap.classList.remove('on'); cap.textContent = ''; layoutOverlays(); return; }
+  const apply = () => { cap.textContent = t; cap.classList.add('on'); cap.style.opacity = '1'; layoutOverlays(); };
+  if (animate && cap.classList.contains('on') && cap.textContent !== t) { cap.style.opacity = '0'; setTimeout(apply, 180); } else apply();
+}
+
+/* ---------- анімації зміни (Web Animations) ---------- */
+const EASE = 'cubic-bezier(.22,1,.36,1)';
+const ANIMS = {
+  fade: { inn: [{ opacity: 0 }, { opacity: 1 }], ease: 'ease-in-out' },   // нова картинка розчиняється над старою без «провалу» посередині
+  slideleft: { inn: [{ transform: 'translateX(100%)' }, { transform: 'none' }], out: [{ transform: 'none' }, { transform: 'translateX(-100%)' }] },
+  slideright: { inn: [{ transform: 'translateX(-100%)' }, { transform: 'none' }], out: [{ transform: 'none' }, { transform: 'translateX(100%)' }] },
+  slideup: { inn: [{ transform: 'translateY(100%)' }, { transform: 'none' }], out: [{ transform: 'none' }, { transform: 'translateY(-100%)' }] },
+  slidedown: { inn: [{ transform: 'translateY(-100%)' }, { transform: 'none' }], out: [{ transform: 'none' }, { transform: 'translateY(100%)' }] },
+  zoomin: { inn: [{ opacity: 0, transform: 'scale(.6)' }, { opacity: 1, transform: 'none' }], out: [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(1.4)' }] },
+  zoomout: { inn: [{ opacity: 0, transform: 'scale(1.4)' }, { opacity: 1, transform: 'none' }], out: [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.6)' }] },
+  flip: { seq: true, ease: 'ease-in-out', inn: [{ opacity: 0, transform: 'rotateY(-90deg)', offset: 0 }, { opacity: 1, transform: 'rotateY(-72deg)', offset: .2 }, { opacity: 1, transform: 'rotateY(0deg)', offset: 1 }], out: [{ opacity: 1, transform: 'rotateY(0deg)', offset: 0 }, { opacity: 1, transform: 'rotateY(72deg)', offset: .8 }, { opacity: 0, transform: 'rotateY(90deg)', offset: 1 }] },
+  page: { origin: '0 50%', top: 'out', inn: [{ filter: 'brightness(.65)' }, { filter: 'brightness(1)' }], out: [{ transform: 'rotateY(0deg)', filter: 'brightness(1)', opacity: 1, offset: 0 }, { transform: 'rotateY(-100deg)', filter: 'brightness(.55)', opacity: 1, offset: .85 }, { transform: 'rotateY(-110deg)', filter: 'brightness(.5)', opacity: 0, offset: 1 }], ease: 'cubic-bezier(.45,.05,.35,1)' },
+  blur: { inn: [{ opacity: 0, filter: 'blur(30px)' }, { opacity: 1, filter: 'blur(0)' }], out: [{ opacity: 1, filter: 'blur(0)' }, { opacity: 0, filter: 'blur(30px)' }] },
+  rotate: { inn: [{ opacity: 0, transform: 'rotate(-120deg) scale(.3)' }, { opacity: 1, transform: 'none' }], out: [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'rotate(120deg) scale(.3)' }] },
+  bounce: { inn: [{ transform: 'translateY(-110%)', offset: 0, easing: 'ease-in' }, { transform: 'translateY(0)', offset: .55, easing: 'ease-out' }, { transform: 'translateY(-12%)', offset: .72, easing: 'ease-in' }, { transform: 'translateY(0)', offset: .86, easing: 'ease-out' }, { transform: 'translateY(-4%)', offset: .94, easing: 'ease-in' }, { transform: 'translateY(0)', offset: 1 }], out: [{ opacity: 1 }, { opacity: 1, offset: .6 }, { opacity: 0 }], ease: 'linear' },
+  // ---- ще 3D (сцена має perspective; sync: обидві картинки рухаються одночасно, навіть коли ввімкнено «Без накладання») ----
+  flipx: { seq: true, ease: 'ease-in-out', inn: [{ opacity: 0, transform: 'rotateX(90deg)', offset: 0 }, { opacity: 1, transform: 'rotateX(72deg)', offset: .2 }, { opacity: 1, transform: 'rotateX(0deg)', offset: 1 }], out: [{ opacity: 1, transform: 'rotateX(0deg)', offset: 0 }, { opacity: 1, transform: 'rotateX(-72deg)', offset: .8 }, { opacity: 0, transform: 'rotateX(-90deg)', offset: 1 }] },
+  diag: { seq: true, ease: 'ease-in-out', inn: [{ opacity: 0, transform: 'rotate3d(1,1,0,-90deg)', offset: 0 }, { opacity: 1, transform: 'rotate3d(1,1,0,-72deg)', offset: .2 }, { opacity: 1, transform: 'none', offset: 1 }], out: [{ opacity: 1, transform: 'none', offset: 0 }, { opacity: 1, transform: 'rotate3d(1,1,0,72deg)', offset: .8 }, { opacity: 0, transform: 'rotate3d(1,1,0,90deg)', offset: 1 }] },
+  cubeleft: { sync: true, ease: 'cubic-bezier(.65,0,.35,1)', fn: (w) => cubeK('Y', w, 1) },
+  cuberight: { sync: true, ease: 'cubic-bezier(.65,0,.35,1)', fn: (w) => cubeK('Y', w, -1) },
+  cubedown: { sync: true, ease: 'cubic-bezier(.65,0,.35,1)', fn: (w, h) => cubeK('X', h, 1) },
+  cubeup: { sync: true, ease: 'cubic-bezier(.65,0,.35,1)', fn: (w, h) => cubeK('X', h, -1) },
+  carousel: { sync: true, ease: 'cubic-bezier(.45,.05,.35,1)', inn: [{ opacity: 0, transform: 'translateX(70%) translateZ(-400px) rotateY(-40deg)' }, { opacity: 1, transform: 'none' }], out: [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(-70%) translateZ(-400px) rotateY(40deg)' }] },
+  tunnel: { sync: true, ease: 'cubic-bezier(.4,0,.2,1)', inn: [{ opacity: 0, transform: 'translateZ(-900px)' }, { opacity: 1, transform: 'none' }], out: [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateZ(500px)' }] },
+  twist: { sync: true, ease: 'cubic-bezier(.5,0,.3,1)', inn: [{ opacity: 0, transform: 'rotateY(-180deg) scale(.3)' }, { opacity: 1, transform: 'none' }], out: [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'rotateY(180deg) scale(.3)' }] },
+  pagerev: { origin: '100% 50%', top: 'out', inn: [{ filter: 'brightness(.65)' }, { filter: 'brightness(1)' }], out: [{ transform: 'rotateY(0deg)', filter: 'brightness(1)', opacity: 1, offset: 0 }, { transform: 'rotateY(100deg)', filter: 'brightness(.55)', opacity: 1, offset: .85 }, { transform: 'rotateY(110deg)', filter: 'brightness(.5)', opacity: 0, offset: 1 }], ease: 'cubic-bezier(.45,.05,.35,1)' },
+  flap: { origin: '50% 0', top: 'out', inn: [{ filter: 'brightness(.65)' }, { filter: 'brightness(1)' }], out: [{ transform: 'rotateX(0deg)', filter: 'brightness(1)', opacity: 1, offset: 0 }, { transform: 'rotateX(-100deg)', filter: 'brightness(.55)', opacity: 1, offset: .85 }, { transform: 'rotateX(-110deg)', filter: 'brightness(.5)', opacity: 0, offset: 1 }], ease: 'cubic-bezier(.45,.05,.35,1)' },
+  drop: { origin: '50% 100%', top: 'out', inn: [{ filter: 'brightness(.65)' }, { filter: 'brightness(1)' }], out: [{ transform: 'rotateX(0deg)', filter: 'brightness(1)', opacity: 1, offset: 0 }, { transform: 'rotateX(100deg)', filter: 'brightness(.55)', opacity: 1, offset: .85 }, { transform: 'rotateX(110deg)', filter: 'brightness(.5)', opacity: 0, offset: 1 }], ease: 'cubic-bezier(.45,.05,.35,1)' },
+  wipe: { inn: [{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)' }], comp: [{ clipPath: 'inset(0 0 0 0)' }, { clipPath: 'inset(0 0 0 100%)' }] },   // comp: стара картинка відступає з того боку, де відкривається нова
+  curtain: { inn: [{ clipPath: 'inset(0 50% 0 50%)' }, { clipPath: 'inset(0 0 0 0)' }], split: true },   // split: стара розходиться на дві половини
+};
+function cubeK(axis, dim, dir) {   // куб: дві грані на одному ребрі, повертаються разом навколо центру куба (dim - розмір сцени вздовж осі)
+  const tf = a => `translateZ(${-dim / 2}px) rotate${axis}(${a}deg) translateZ(${dim / 2}px)`;
+  return { inn: [{ transform: tf(90 * dir) }, { transform: tf(0) }], out: [{ transform: tf(0) }, { transform: tf(-90 * dir) }] };
+}
+const ANIM_NAMES = Object.keys(ANIMS);
+const FADEOUT = [{ opacity: 1 }, { opacity: 0 }];
+function dropLayers(keep) {   // миттєво прибирає всі шари, крім потрібного (після швидкого перемикання або зміни налаштувань)
+  for (const l of layers) if (l !== keep) { try { (l.anims || []).forEach(a => a.cancel()); } catch {} l.el.remove(); (l.extra || []).forEach(x => { try { x.anims.forEach(a => a.cancel()); } catch {} x.el.remove(); }); }
+  layers = keep ? [keep] : [];
+}
+function mkLayer(im, img) {
+  const e = document.createElement('div'); e.className = 'lay'; e.append(img);
+  return { el: e, img, anims: [], id: im.id };
+}
+function transition(nl, old, name, ms) {
+  stage.append(nl.el);
+  const a0 = ANIMS[name], a = a0 && a0.fn ? { ...a0, ...a0.fn(stage.clientWidth, stage.clientHeight) } : a0;
+  if (!old || !a || ms <= 0) { if (old) dropLayers(nl); return; }
+  const out = [], noOv = cfg.noOverlap !== false;   // noOverlap: стара картинка не просвічує крізь нову (важливо для прозорих логотипів)
+  const run = (L, kf, dur, delay) => { const an = L.el.animate(kf, { duration: dur, delay: delay || 0, easing: a.ease || EASE, fill: 'both' }); L.anims.push(an); return an.finished.catch(() => {}); };
+  if (a.origin) old.el.style.transformOrigin = a.origin;
+  if (a.top === 'out') { old.el.style.zIndex = '2'; nl.el.style.zIndex = '1'; }   // «гортання»: стара сторінка зверху й відкидається, нова вже лежить під нею
+  if (noOv && a.comp) { out.push(run(nl, a.inn, ms)); out.push(run(old, a.comp, ms)); }   // шторка: картинки ділять область без накладання
+  else if (noOv && a.split) {   // розкриття від центру: стара розходиться на дві половини, у проміжок виходить нова
+    const ce = old.el.cloneNode(true), L2 = { el: ce, anims: [] }; stage.append(ce); old.extra = [L2];
+    out.push(run(nl, a.inn, ms));
+    out.push(run(old, [{ clipPath: 'inset(0 50% 0 0)' }, { clipPath: 'inset(0 100% 0 0)' }], ms));
+    out.push(run(L2, [{ clipPath: 'inset(0 0 0 50%)' }, { clipPath: 'inset(0 0 0 100%)' }], ms));
+  } else if (noOv && !a.seq && !a.sync) {   // решта: спершу стара зникає (перша половина часу), потім з'являється нова
+    const half = ms / 2;
+    nl.anims.push(nl.el.animate([{ opacity: 0 }, { opacity: 0 }], { duration: half }));
+    out.push(run(old, a.out || FADEOUT, half, 0)); out.push(run(nl, a.inn, half, half));
+  } else {   // з накладанням (або «поворот картки», де вже по черзі)
+    const half = a.seq ? ms / 2 : ms;
+    out.push(run(nl, a.inn, half, a.seq ? half : 0));
+    if (a.out) out.push(run(old, a.out, half, 0));
+  }
+  const mine = token;
+  Promise.all(out).then(() => { if (mine !== token) return; dropLayers(nl); try { nl.el.style.zIndex = ''; } catch {} });
+}
+
+/* ---------- звук ---------- */
+let actx = null;
+function ac() { if (!actx) { const A = window.AudioContext || window.webkitAudioContext; if (A) { try { actx = new A(); } catch {} } } if (actx && actx.state === 'suspended') actx.resume().catch(() => {}); return actx; }
+function noise(a, sec) { const n = Math.max(1, Math.floor(a.sampleRate * sec)), b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; return b; }
+function env(a, t, peak, atk, dec) { const g = a.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(.0002, peak), t + atk); g.gain.exponentialRampToValueAtTime(.0001, t + atk + dec); g.connect(a.destination); return g; }
+const SYN = {
+  page(a, v) {   // шурхіт паперу: шум із «тремтінням» гучності й зсувом частоти
+    const t = a.currentTime, s = a.createBufferSource(); s.buffer = noise(a, .6);
+    const bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = .9; bp.frequency.setValueAtTime(1500, t); bp.frequency.exponentialRampToValueAtTime(5200, t + .4);
+    const g = a.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v * .8, t + .03);
+    for (let i = 1; i < 7; i++) g.gain.linearRampToValueAtTime(v * (i % 2 ? .3 : .75), t + .03 + i * .05);
+    g.gain.exponentialRampToValueAtTime(.0001, t + .45);
+    s.connect(bp); bp.connect(g); g.connect(a.destination); s.start(t); s.stop(t + .6);
+  },
+  whoosh(a, v) {
+    const t = a.currentTime, s = a.createBufferSource(); s.buffer = noise(a, .6);
+    const bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4; bp.frequency.setValueAtTime(250, t); bp.frequency.exponentialRampToValueAtTime(3200, t + .38);
+    const g = env(a, t, v * .9, .16, .3); s.connect(bp); bp.connect(g); s.start(t); s.stop(t + .6);
+  },
+  click(a, v) {
+    const t = a.currentTime, o = a.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(1500, t); o.frequency.exponentialRampToValueAtTime(600, t + .04);
+    const g = env(a, t, v * .35, .002, .05); o.connect(g); o.start(t); o.stop(t + .08);
+  },
+  pop(a, v) {
+    const t = a.currentTime, o = a.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(620, t); o.frequency.exponentialRampToValueAtTime(160, t + .12);
+    const g = env(a, t, v * .9, .005, .14); o.connect(g); o.start(t); o.stop(t + .2);
+  },
+  chime(a, v) {
+    const t = a.currentTime;
+    [[880, 1], [1320, .5], [1760, .25]].forEach(([f, k]) => { const o = a.createOscillator(); o.type = 'sine'; o.frequency.value = f; const g = env(a, t, v * .4 * k, .005, .9); o.connect(g); o.start(t); o.stop(t + 1); });
+  },
+};
+function playSound(force) {
+  if (!cfg || (PREVIEW && !force) || cfg.sound === 'none') return;
+  const v = Math.min(1, Math.max(0, (Number(cfg.volume) || 0) / 100));
+  if (v <= 0) return;
+  if (cfg.sound === 'file') {
+    if (!cfg.soundFile) return;
+    try { const au = new Audio(`/slideshow-sound?p=${encodeURIComponent(pid)}&v=${Number(cfg.soundVer) || 0}`); au.volume = v; au.play().catch(() => {}); } catch {}
+    return;
+  }
+  const a = ac(), f = SYN[cfg.sound]; if (a && f) { try { f(a, v * .8); } catch {} }
+}
+
+/* ---------- черга картинок ---------- */
+function shuffled(n, avoid) {
+  const a = [...Array(n).keys()];
+  for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  if (n > 1 && a[0] === avoid) { const k = 1 + Math.floor(Math.random() * (n - 1)); [a[0], a[k]] = [a[k], a[0]]; }
+  return a;
+}
+function pickNext() {   // повертає { i, wrapped }: номер наступної картинки й чи почалось нове коло
+  const n = list.length;
+  if (cfg.order === 'random') { let i = Math.floor(Math.random() * n); if (n > 1 && i === cur) i = (i + 1 + Math.floor(Math.random() * (n - 1))) % n; return { i, wrapped: false }; }
+  if (cfg.order === 'shuffle') { let wrapped = false; if (!queue.length) { queue = shuffled(n, cur); wrapped = cur >= 0; } return { i: queue.shift(), wrapped }; }
+  const i = (cur + 1) % n; return { i, wrapped: cur >= 0 && i === 0 };
+}
+const durOf = im => Math.max(1, (Number(im && im.sec) > 0 ? Number(im.sec) : cfg.showSec)) * 1000;
+const loadImg = url => {
+  if (cache.has(url)) return cache.get(url);
+  const p = new Promise((ok, bad) => { const im = new Image(); im.decoding = 'async'; im.onload = () => ok(im); im.onerror = () => bad(new Error('img')); im.src = url; setTimeout(() => bad(new Error('timeout')), 6000); });
+  p.catch(() => cache.delete(url)); cache.set(url, p); return p;
+};
+function stopTimers() { clearTimeout(timer); timer = null; }
+function startTimer(ms) {
+  stopTimers(); slideDur = ms; slideStart = Date.now(); remaining = ms;
+  if (!holds.size) timer = setTimeout(advance, ms);
+  try { if (progAnim) progAnim.cancel(); } catch {}
+  progAnim = null;
+  if (cfg.progress) { progAnim = progI.animate([{ width: '0%' }, { width: '100%' }], { duration: ms, easing: 'linear', fill: 'forwards' }); if (holds.size) progAnim.pause(); }
+}
+function hold(reason) {
+  if (holds.has(reason)) return;
+  const was = holds.size; holds.add(reason);
+  if (!was) { stopTimers(); remaining = Math.max(0, slideDur - (Date.now() - slideStart)); try { if (progAnim) progAnim.pause(); if (kenAnim) kenAnim.pause(); } catch {} }
+}
+function release(reason) {
+  if (!holds.delete(reason) || holds.size) return;
+  slideStart = Date.now() - (slideDur - remaining);
+  if (!ended) timer = setTimeout(advance, remaining);
+  try { if (progAnim) progAnim.play(); if (kenAnim) kenAnim.play(); } catch {}
+}
+function advance() {
+  if (!cfg || !list.length) return;
+  const r = pickNext();
+  if (r.wrapped && cfg.afterEnd !== 'loop') {
+    if (cfg.afterEnd === 'stop') { stopTimers(); ended = true; return; }   // лишається остання картинка
+    ended = true; stopTimers(); if (!PREVIEW) box.classList.add('off'); return;   // віджет ховається, поки не прийде «спочатку» чи нові налаштування
+  }
+  showAt(r.i, { sound: true });
+}
+function go(dir) {   // ручне перемикання (команди з програми)
+  if (!cfg || !list.length) return;
+  if (ended) { ended = false; box.classList.remove('off'); }
+  if (dir < 0) {
+    if (hist.length > 1) { hist.pop(); showAt(hist[hist.length - 1], { sound: true, noPush: true }); }
+    else showAt((cur - 1 + list.length) % list.length, { sound: true });
+    return;
+  }
+  const r = pickNext(); showAt(r.i, { sound: true });
+}
+
+/* ---------- показ однієї картинки ---------- */
+async function showAt(i, o) {
+  o = o || {};
+  const im = list[i]; if (!im) return;
+  const my = ++token;
+  let img;
+  try { img = await loadImg(urlOf(im)); }
+  catch {
+    if (my !== token) return;
+    fails++;
+    if (fails >= list.length) { stopTimers(); return; }   // жодна картинка не завантажується: не крутимо без кінця
+    cur = i; curId = im.id; setTimeout(() => { if (my === token) advance(); }, 300); return;
+  }
+  if (my !== token) return;
+  fails = 0;
+  const first = cur < 0 || o.first;
+  const old = layers[layers.length - 1] || null;
+  const el = img.cloneNode(); el.decoding = 'async';
+  const nl = mkLayer(im, el);
+  if (old && layers.length > 1) dropLayers(old);   // попередня зміна ще йшла: фіксуємо її результат
+  layers.push(nl);
+  const name = cfg.anim === 'random' ? ANIM_NAMES[Math.floor(Math.random() * ANIM_NAMES.length)] : cfg.anim;
+  transition(nl, o.instant || first ? null : old, o.instant || first ? 'none' : name, o.instant ? 0 : Number(cfg.transMs) || 0);
+  if (first || o.instant) dropLayers(nl);
+  cur = i; curId = im.id;
+  if (!o.noPush) { hist.push(i); if (hist.length > 60) hist.shift(); }
+  setCaption(im, !first && !o.instant); renderDots();
+  try { if (kenAnim) kenAnim.cancel(); } catch {}
+  kenAnim = null;
+  if (cfg.kenBurns) { kenAnim = el.animate([{ transform: 'scale(1)' }, { transform: 'scale(' + (1 + cfg.kenScale / 100) + ')' }], { duration: durOf(im) + (Number(cfg.transMs) || 0), easing: 'linear', fill: 'forwards' }); if (holds.size) kenAnim.pause(); }
+  startTimer(durOf(im));
+  if (first) { if (cfg.soundFirst) playSound(false); }
+  else if (o.sound) playSound(false);
+}
+
+/* ---------- періодичний показ віджета ---------- */
+function setupPeriodic() {
+  clearTimeout(visTimer); release('vis');
+  if (!cfg) return;
+  box.classList.toggle('off', ended && cfg.afterEnd === 'hide' && !PREVIEW);
+  if (PREVIEW || !cfg.periodic) { if (!ended) box.classList.remove('off'); return; }
+  const step = show => {
+    if (ended && cfg.afterEnd === 'hide') return;
+    box.classList.toggle('off', !show);
+    if (show) { release('vis'); if (cfg.soundFirst) playSound(false); } else hold('vis');
+    visTimer = setTimeout(() => step(!show), (show ? cfg.onSec : cfg.offSec) * 1000);
+  };
+  visTimer = setTimeout(() => step(false), cfg.onSec * 1000);
+}
+
+/* ---------- налаштування й команди ---------- */
+const sigOf = l => l.map(i => [i.id, i.ver, i.sec, i.caption].join(':')).join('|');
+function restart(o) {
+  o = o || {};
+  token++;
+  stopTimers(); queue = []; hist = []; cur = -1; curId = ''; ended = false; fails = 0;
+  dropLayers(null); stage.replaceChildren();
+  hint.classList.toggle('on', !list.length);
+  setCaption(null); renderDots();
+  if (!list.length) return;
+  const start = cfg.startRandom ? Math.floor(Math.random() * list.length) : 0;
+  if (cfg.order === 'shuffle') { queue = shuffled(list.length, -1).filter(x => x !== start); }
+  showAt(start, { first: true });
+}
+function applyCfg(c, pidIn) {
+  const prevCur = curId, prevSig = lastSig;
+  cfg = c; if (pidIn) pid = pidIn;
+  list = enabled();
+  applyStyle(c);
+  for (const im of list) loadImg(urlOf(im)).catch(() => {});   // всі картинки вантажаться наперед, щоб зміна не блимала
+  const sig = sigOf(list) + '|' + c.order + c.showSec + c.startRandom + c.kenBurns + c.kenScale + c.progress + c.showCaption;
+  lastSig = sig;
+  hint.classList.toggle('on', !list.length);
+  if (!list.length) { restart(); setupPeriodic(); return; }
+  const idx = prevCur ? list.findIndex(i => i.id === prevCur) : -1;
+  if (idx >= 0 && prevSig === sig && cur >= 0) {   // змінився лише вигляд: нічого не перезапускаємо
+    setCaption(list[idx], false); renderDots(); setupPeriodic(); return;
+  }
+  if (idx >= 0 && prevCur) {   // змінився набір чи час: лишаємось на цій самій картинці й відновлюємо відлік
+    queue = []; hist = [idx]; cur = idx; ended = false;
+    showAt(idx, { instant: true, sound: false });
+  } else restart();
+  setupPeriodic();
+}
+function ctl(cmd) {
+  if (!cfg) return;
+  if (cmd === 'next') go(1);
+  else if (cmd === 'prev') go(-1);
+  else if (cmd === 'pause') hold('user');
+  else if (cmd === 'play') release('user');
+  else if (cmd === 'toggle') (holds.has('user') ? release : hold)('user');
+  else if (cmd === 'restart') { holds.delete('user'); box.classList.remove('off'); restart(); setupPeriodic(); }
+}
+const load = () => fetch('/api/slideshow?p=' + encodeURIComponent(PROFILE)).then(r => r.json());
+if (PREVIEW) {
+  addEventListener('message', e => {
+    if (e.origin !== location.origin || !e.data) return;
+    if (e.data.type === 'cfg' && e.data.cfg) applyCfg(e.data.cfg, idOk(e.data.pid) ? e.data.pid : '');
+    else if (e.data.type === 'restart') ctl('restart');
+    else if (e.data.type === 'ctl') ctl(String(e.data.cmd || ''));
+    else if (e.data.type === 'testSound') playSound(true);
+  });
+  load().then(j => { if (j && j.cfg) { myId = pid = j.id || ''; applyCfg(j.cfg, pid); } try { parent.postMessage({ type: 'slReady' }, location.origin); } catch {} }).catch(() => {});
+} else {
+  load().then(j => { if (j && j.cfg) { myId = pid = j.id || ''; applyCfg(j.cfg, pid); } }).catch(() => {});
+  (function connect() {
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.onmessage = e => {
+      try {
+        const m = JSON.parse(e.data); if (!m) return;
+        if (m.type === 'slideshow' && m.cfg && (!m.id || m.id === myId)) applyCfg(m.cfg, myId);
+        else if (m.type === 'slideshowCtl' && (!m.id || m.id === myId)) ctl(String(m.cmd || ''));
+      } catch {}
+    };
+    ws.onclose = () => setTimeout(connect, 2000);
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  })();
+}
+})();
+</script>
+<script src="/profile-reload.js"></script>
+</body>
+</html>

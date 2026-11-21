@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MultiChat - рядок, що біжить</title>
+<style>
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif}
+body.preview{background:repeating-conic-gradient(#2b2b36 0 25%,#1d1d26 0 50%) 0 0/24px 24px}
+#bar{position:absolute;left:var(--mx);right:var(--mx);height:var(--h);display:flex;align-items:stretch;box-sizing:border-box;overflow:hidden;
+  background:var(--bg);border-radius:var(--rad);border:var(--bw) solid var(--bc);box-shadow:var(--bsh);
+  -webkit-backdrop-filter:blur(var(--blur));backdrop-filter:blur(var(--blur));
+  font-family:var(--font);font-size:var(--fs);color:var(--tc);font-weight:var(--fw);font-style:var(--fst);text-transform:var(--tcs);letter-spacing:var(--ls);text-shadow:var(--ts);
+  opacity:1;transition:opacity .6s ease}
+#bar.hide{opacity:0}
+#bar.pos-bottom{bottom:var(--my)}
+#bar.pos-top{top:var(--my)}
+#bar.pos-center{top:50%;margin-top:calc(var(--h) / -2)}
+#acc{position:absolute;left:0;right:0;top:0;height:var(--aw);background:var(--ac);z-index:3;display:none}
+#bar.acc #acc{display:block}
+#label{flex:none;display:none;align-items:center;padding:0 var(--lp);background:var(--lbg);color:var(--lc);font-weight:var(--lw);white-space:nowrap;position:relative;z-index:2;text-shadow:none}
+#bar.lab #label{display:flex}
+#vp{flex:1;min-width:0;position:relative;overflow:hidden}
+#strip{position:absolute;left:0;top:0;height:100%;display:flex;align-items:center;white-space:nowrap;will-change:transform}
+.unit{display:flex;align-items:center;flex:none}
+.it{flex:none}
+.it.alt{color:var(--ac2)}
+.sep{flex:none;padding:0 var(--sg);opacity:.9}
+#strip.one{left:0;right:0;justify-content:center;padding:0 .6em;box-sizing:border-box}
+#strip.one .it{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.an-fade{animation:tf .5s ease both}.an-up{animation:tu .5s cubic-bezier(.22,1,.36,1) both}.an-left{animation:tl .5s cubic-bezier(.22,1,.36,1) both}.an-zoom{animation:tz .45s cubic-bezier(.22,1,.36,1) both}
+@keyframes tf{from{opacity:0}to{opacity:1}}
+@keyframes tu{from{opacity:0;transform:translateY(60%)}to{opacity:1;transform:none}}
+@keyframes tl{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:none}}
+@keyframes tz{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div id="bar"><div id="acc"></div><div id="label"></div><div id="vp"><div id="strip"></div></div></div>
+<script>
+(() => {
+const q = new URLSearchParams(location.search), PREVIEW = q.get('preview') === '1', PROFILE = q.get('p') || '';
+const bar = document.getElementById('bar'), vp = document.getElementById('vp'), strip = document.getElementById('strip'), label = document.getElementById('label');
+if (PREVIEW) document.body.classList.add('preview');
+let cfg = null, myId = '', cycleTimer = null, perTimer = null, cycleIdx = 0, styleEl = null;
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const rgba = (hex, a) => { const n = parseInt(String(hex).slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+const itemsOf = c => String(c.text || '').split('\n').map(x => x.trim()).filter(Boolean);
+function applyStyle(c) {
+  const st = bar.style, f = String(c.font || 'Segoe UI').replace(/["\\]/g, '');
+  st.setProperty('--font', `"${f}", "Segoe UI", system-ui, sans-serif`); st.setProperty('--fs', c.fontSize + 'px'); st.setProperty('--tc', c.textColor);
+  st.setProperty('--fw', c.bold ? '700' : '400'); st.setProperty('--fst', c.italic ? 'italic' : 'normal'); st.setProperty('--ls', c.letterSpacing + 'px');
+  st.setProperty('--tcs', c.textCase === 'upper' ? 'uppercase' : c.textCase === 'lower' ? 'lowercase' : 'none');
+  const sh = [];
+  if (c.outline > 0) for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8; sh.push(`${(Math.cos(a) * c.outline).toFixed(2)}px ${(Math.sin(a) * c.outline).toFixed(2)}px 0 ${c.outlineColor}`); }
+  if (c.shadow) sh.push('0 2px 6px rgba(0,0,0,.75)');
+  st.setProperty('--ts', sh.length ? sh.join(',') : 'none');
+  st.setProperty('--h', c.height + 'px'); st.setProperty('--mx', c.marginX + 'px'); st.setProperty('--my', c.marginY + 'px'); { const pw = Math.min(100, Math.max(5, Number(c.barWidth) || 100)) / 100, mx2 = 2 * c.marginX; bar.style.width = 'calc((100% - ' + mx2 + 'px) * ' + pw + ')'; bar.style.left = c.barAlign === 'left' || !c.barAlign ? c.marginX + 'px' : c.barAlign === 'right' ? 'auto' : 'calc((100% - (100% - ' + mx2 + 'px) * ' + pw + ') / 2)'; bar.style.right = c.barAlign === 'right' ? c.marginX + 'px' : 'auto'; }   // довжина смужки: частка ширини джерела й розташування
+  st.setProperty('--bg', c.bgGradient ? `linear-gradient(90deg, ${rgba(c.bgColor, c.bgOpacity / 100)}, ${rgba(c.bgColor2, c.bgOpacity / 100)})` : rgba(c.bgColor, c.bgOpacity / 100));
+  st.setProperty('--rad', c.radius + 'px'); st.setProperty('--bw', c.borderWidth + 'px'); st.setProperty('--bc', c.borderColor);
+  st.setProperty('--blur', c.blur + 'px'); st.setProperty('--bsh', c.boxShadow ? '0 4px 14px rgba(0,0,0,.45)' : 'none');
+  st.setProperty('--ac', c.accentColor); st.setProperty('--aw', c.accentWidth + 'px'); st.setProperty('--ac2', c.altColor); st.setProperty('--sg', c.sepGap + 'px');
+  st.setProperty('--lc', c.labelColor); st.setProperty('--lbg', c.labelBg); st.setProperty('--lw', c.labelBold ? '700' : '400'); st.setProperty('--lp', c.labelPad + 'px');
+  bar.className = 'pos-' + c.position + (c.accentLine ? ' acc' : '') + (c.label ? ' lab' : '');
+  label.textContent = c.label || '';
+  const fade = c.edgeFade > 0 ? `linear-gradient(to right, transparent 0, #000 ${c.edgeFade}px, #000 calc(100% - ${c.edgeFade}px), transparent 100%)` : 'none';
+  vp.style.webkitMaskImage = fade; vp.style.maskImage = fade;
+}
+/* Біжучий рядок: послідовність елементів з роздільниками повторюється стільки разів, щоб заповнити екран, і рухається рівно на довжину однієї послідовності, тож цикл безшовний */
+function buildCrawl() {
+  strip.className = ''; strip.style.animation = 'none'; strip.replaceChildren();
+  const items = itemsOf(cfg); if (!items.length) return;
+  const unit = () => { const u = el('div', 'unit'); items.forEach((t, i) => u.append(el('span', 'it' + (cfg.altEnabled && i % 2 ? ' alt' : ''), t), el('span', 'sep', cfg.separator || ''))); return u; };
+  const u1 = unit(); strip.append(u1);
+  const w = u1.offsetWidth; if (w <= 0) return;
+  const n = Math.max(2, Math.ceil(vp.clientWidth / w) + 1);
+  for (let i = 1; i < n; i++) strip.append(unit());
+  strip.style.setProperty('--cyc', w + 'px');
+  if (!styleEl) { styleEl = document.createElement('style'); document.head.append(styleEl); }
+  styleEl.textContent = '@keyframes crawlL{from{transform:translateX(0)}to{transform:translateX(calc(-1 * var(--cyc)))}}@keyframes crawlR{from{transform:translateX(calc(-1 * var(--cyc)))}to{transform:translateX(0)}}';
+  void strip.offsetWidth;   // перезапуск анімації
+  strip.style.animation = `${cfg.direction === 'right' ? 'crawlR' : 'crawlL'} ${(w / Math.max(1, cfg.speed)).toFixed(2)}s linear infinite`;
+}
+/* Режим «По черзі»: один елемент за раз з вибраною анімацією зміни */
+function showOne() {
+  const items = itemsOf(cfg); if (!items.length) { strip.replaceChildren(); return; }
+  cycleIdx = cycleIdx % items.length;
+  const it = el('span', 'it' + (cfg.altEnabled && cycleIdx % 2 ? ' alt' : ''), items[cycleIdx]);
+  if (cfg.cycleAnim !== 'none') it.classList.add('an-' + cfg.cycleAnim);
+  strip.replaceChildren(it);
+}
+function buildCycle() {
+  strip.className = 'one'; strip.style.animation = 'none';
+  showOne();
+  cycleTimer = setInterval(() => { cycleIdx++; showOne(); }, Math.max(1, cfg.cycleSec) * 1000);
+}
+function periodic() {   // «показувати періодично»: рядок з'являється на showSec секунд і ховається на hideSec; у перегляді показується завжди
+  clearTimeout(perTimer); bar.classList.remove('hide');
+  if (PREVIEW || !cfg.periodic) return;
+  const step = show => { bar.classList.toggle('hide', !show); perTimer = setTimeout(() => step(!show), (show ? cfg.showSec : cfg.hideSec) * 1000); };
+  perTimer = setTimeout(() => step(false), cfg.showSec * 1000);
+}
+function rebuild() {
+  clearInterval(cycleTimer); cycleTimer = null;
+  if (!cfg) return;
+  if (cfg.mode === 'cycle') buildCycle(); else buildCrawl();
+}
+function applyCfg(c) { cfg = c; applyStyle(c); rebuild(); periodic(); }
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (cfg && cfg.mode !== 'cycle') rebuild(); });
+let rz = 0; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (cfg && cfg.mode !== 'cycle') rebuild(); }, 200); });
+if (PREVIEW) {
+  addEventListener('message', e => {
+    if (e.origin !== location.origin || !e.data) return;
+    if (e.data.type === 'cfg') applyCfg(e.data.cfg);
+    else if (e.data.type === 'restart' && cfg) { cycleIdx = 0; rebuild(); }
+  });
+  fetch('/api/ticker?p=' + encodeURIComponent(PROFILE)).then(r => r.json()).then(j => { if (j && j.cfg) { myId = j.id || ''; applyCfg(j.cfg); } try { parent.postMessage({ type: 'tkReady' }, location.origin); } catch {} }).catch(() => {});
+} else {
+  fetch('/api/ticker?p=' + encodeURIComponent(PROFILE)).then(r => r.json()).then(j => { if (j && j.cfg) { myId = j.id || ''; applyCfg(j.cfg); } }).catch(() => {});
+  (function connect() {
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.onmessage = e => { try { const m = JSON.parse(e.data); if (m && m.type === 'ticker' && m.cfg && (!m.id || m.id === myId)) applyCfg(m.cfg); } catch {} };
+    ws.onclose = () => setTimeout(connect, 2000);
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  })();
+}
+})();
+</script>
+<script src="/profile-reload.js"></script>
+</body>
+</html>

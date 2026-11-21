@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MultiChat - редактор мульти-віджета</title>
+<style>
+:root{--bg:#0e0e12;--panel:#17171d;--surface:#13131a;--surface-raised:#1d1d26;--line:#30303b;--txt:#f0f0f5;--mut:#aaaab8;--acc:#7c5cff;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:13px 'Segoe UI',system-ui,sans-serif;overflow:hidden}
+button,input,select{font:inherit;color:var(--txt)}
+button{cursor:pointer;background:var(--surface-raised);border:1px solid var(--line);border-radius:8px;padding:5px 10px;min-height:30px}
+button:hover{border-color:var(--mut)}
+button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+button:disabled{opacity:.45;cursor:default}
+input[type=text],input[type=number],select{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:5px 8px;min-height:30px;min-width:0}
+input[type=number]{width:70px}
+input[type=color]{width:34px;height:30px;padding:1px;border:1px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer}
+label.chk{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+#app{display:flex;flex-direction:column;height:100%}
+#tb,#ft{flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;background:var(--panel)}
+#tb{border-bottom:1px solid var(--line);gap:4px;padding:6px 8px;flex-wrap:nowrap;overflow-x:auto}   /* усе в одну смугу; на дуже вузькому вікні смуга гортається */
+#tb>*{flex:none}
+#tb button{padding:5px 8px;white-space:nowrap}
+#tb input[type=number]{width:62px}
+#tb select:not([multiple]):not([size]):not(#_){padding-right:28px;background-position:right 9px center}
+#tb .sep{margin:0}
+#tb #st{margin-left:2px}
+#tb{scrollbar-width:thin}
+#tb #prof{width:112px}
+#tb #fmt{width:166px}
+#tb #zoom{width:96px}
+#ft{border-top:1px solid var(--line)}
+.sep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
+.grow{margin-left:auto}
+#mn{flex:1;min-height:0;display:grid;grid-template-columns:230px minmax(0,1fr) 310px;gap:10px;padding:10px}
+.pn{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;overflow:auto;overflow-x:hidden;min-height:0}
+.pn h4{margin:0 0 8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut)}
+#sw{position:relative;min-width:0;min-height:0;display:flex;align-items:center;justify-content:center;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px}
+#stage{position:relative;flex:none;box-shadow:0 0 0 1px var(--line);background:repeating-conic-gradient(#2b2b36 0 25%,#1d1d26 0 50%) 0 0/20px 20px}
+#pv{position:absolute;left:0;top:0;border:0;background:transparent}
+#ov{position:absolute;left:0;top:0;touch-action:none;user-select:none}
+.bx{position:absolute;border:1px solid rgba(124,92,255,.55);background:rgba(124,92,255,.06);cursor:move}
+.bx.sel{border:2px solid var(--acc);background:rgba(124,92,255,.12)}
+.bx.hid{border-style:dashed;opacity:.5}
+.bx.lk{cursor:default;border-color:rgba(200,160,60,.6)}
+.bx .lkic{position:absolute;left:2px;top:2px;font-size:12px;line-height:1;pointer-events:none;text-shadow:0 0 3px #000}
+.fl{position:absolute;border:1px dashed rgba(255,255,255,.45);pointer-events:none}
+body.alt .hd,.bx.crop .hd{background:#ffb020;border-color:#ff7a00}
+.bx.crop{border-color:#ff7a00}
+.hd{position:absolute;width:11px;height:11px;background:#fff;border:2px solid var(--acc);border-radius:3px}
+.hd[data-h=nw]{left:-6px;top:-6px;cursor:nwse-resize}.hd[data-h=n]{left:calc(50% - 6px);top:-6px;cursor:ns-resize}.hd[data-h=ne]{right:-6px;top:-6px;cursor:nesw-resize}
+.hd[data-h=e]{right:-6px;top:calc(50% - 6px);cursor:ew-resize}.hd[data-h=w]{left:-6px;top:calc(50% - 6px);cursor:ew-resize}
+.hd[data-h=sw]{left:-6px;bottom:-6px;cursor:nesw-resize}.hd[data-h=s]{left:calc(50% - 6px);bottom:-6px;cursor:ns-resize}.hd[data-h=se]{right:-6px;bottom:-6px;cursor:nwse-resize}
+.gd{position:absolute;background:#ff4d9a;pointer-events:none}
+.ly{display:flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--line);border-radius:9px;margin-bottom:5px;background:var(--surface);cursor:pointer}
+.ly.sel{border-color:var(--acc);background:var(--surface-raised)}
+.ly .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ly.off .t{opacity:.45}
+.ly button{min-height:26px;padding:1px 6px}
+.ly button.off{opacity:.4}
+.row{display:flex;align-items:center;gap:6px;margin:6px 0;flex-wrap:wrap}
+.row>label{width:70px;color:var(--mut);font-size:12px}
+.row input[type=text],.row select{flex:1}
+.row>label.chk{width:auto;color:var(--txt);font-size:13px}
+.grid4{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.grid4 label{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12px;min-width:0}
+.grid4 input{flex:1;width:100%;min-width:0}
+.al{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:6px 0}
+.al button{padding:2px;font-size:15px;min-height:28px}
+.krow{display:flex;align-items:flex-end;gap:8px;flex-wrap:nowrap;margin:6px 0}.kc{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}.kc span{font-size:11px;color:var(--mut);white-space:nowrap}.kc input[type=color]{width:40px}.kc input[type=number]{width:54px}.kc button{width:40px;padding:3px 0;min-height:30px;display:inline-flex;align-items:center;justify-content:center}.ib{padding:0 6px;min-height:24px;border:0;background:transparent;color:var(--mut);font-size:15px}.ib:hover{color:var(--txt)}
+.note{color:var(--mut);font-size:12px;line-height:1.4;margin:6px 0}
+#add{position:relative}
+#addm{position:absolute;left:0;top:34px;z-index:20;min-width:230px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+#addm[hidden]{display:none}
+#addm button{display:block;width:100%;text-align:left;border:0;background:transparent;border-radius:6px}
+#addm button:hover{background:var(--surface-raised)}
+#addm h5{margin:6px 6px 2px;font-size:11px;color:var(--mut);text-transform:uppercase}
+#st{color:var(--mut)}
+#st.err{color:#e0a030}
+.linkcap{color:var(--mut);font-size:12px;display:inline-flex;align-items:center;gap:2px}
+.tipi{display:inline-flex;align-items:center;flex:none;margin-left:3px;cursor:help;font-size:0;line-height:0;color:var(--mut)}
+.tipi .ico-info{display:block;width:18px;height:18px;opacity:.75}
+.tipi:hover .ico-info{opacity:1}
+#obsst{color:var(--mut);flex:1 1 200px;min-width:0}
+#obsst.err{color:#e0a030}
+#obsst.ok{color:#2ecc71}
+.nmrow{display:flex;gap:6px;align-items:center}
+.nmrow[hidden]{display:none}
+@media(max-width:1000px){#mn{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto;align-content:start;overflow:auto}
+#sw{grid-column:1/-1;grid-row:1;height:min(54vh,520px);min-height:260px}
+#lp{grid-row:2;grid-column:1}#pp{grid-row:2;grid-column:2}}
+@media(max-width:620px){#mn{grid-template-columns:minmax(0,1fr);grid-template-rows:none;grid-auto-rows:max-content}.pn{overflow:visible}#lp{grid-column:1;grid-row:2}#pp{grid-column:1;grid-row:3}}
+.ico{width:1.3em;height:1.3em;display:inline-block;vertical-align:-.3em;object-fit:contain}
+button .ico{margin-right:2px}
+.ico-info{width:18px;height:18px;display:block;margin:0}
+.ib{font-size:0;width:30px;min-height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="tb">
+    <select id="prof" title="Профіль (розкладка)"></select>
+    <button id="pNew" title="Нова порожня розкладка">＋ Нова</button>
+    <button id="pDup" title="Копія поточної розкладки">⧉ Копія</button>
+    <button id="pRen">✏️ Назва</button>
+    <button id="pDel">🗑</button>
+    <span class="nmrow" id="nmrow" hidden><input type="text" id="nmin" maxlength="40" placeholder="Назва"><button id="nmok" class="pri">Готово</button><button id="nmno">Скасувати</button></span>
+    <span class="sep"></span>
+    <select id="fmt" title="Формат полотна"></select>
+    <input type="number" id="cw" min="100" max="7680" title="Ширина полотна, px"><span>×</span><input type="number" id="ch" min="100" max="7680" title="Висота полотна, px">
+    <span class="sep"></span>
+    <label class="chk" title="Прив'язувати до сітки й до країв інших шарів"><input type="checkbox" id="snap"> Прив'язка</label>
+    <input type="number" id="grid" min="1" max="200" title="Крок сітки, px" style="width:52px">
+    <span class="sep"></span>
+    <span title="Колір і непрозорість фону полотна">Фон</span><input type="color" id="bgc"><input type="number" id="bgo" min="0" max="100" title="Непрозорість фону, %" style="width:52px">
+    <span class="sep"></span>
+    <select id="zoom" title="Масштаб перегляду"><option value="fit">Вписати</option><option value="0.25">25%</option><option value="0.5">50%</option><option value="1">100%</option></select>
+    <button id="detach" title="Відкрити редактор у власному вікні: полотно без решти функцій програми, зручно на великому екрані">⧉ Вікно</button>
+    <label class="chk grow" style="margin-left:auto"><input type="checkbox" id="auto"> Автозбереження</label>
+    <button id="save" class="pri">Зберегти</button>
+    <span id="st"></span>
+  </header>
+  <main id="mn">
+    <aside class="pn" id="lp">
+      <div id="add"><button id="addb" class="pri" style="width:100%">＋ Додати шар ▾</button><div id="addm" hidden></div></div>
+      <h4 style="margin-top:12px">Шари (зверху вниз = спереду назад)</h4>
+      <div id="ll"></div>
+    </aside>
+    <section id="sw"><div id="stage"><iframe id="pv" title="Перегляд"></iframe><div id="ov"></div></div></section>
+    <aside class="pn" id="pp"></aside>
+  </main>
+  <footer id="ft">
+    <b>OBS:</b>
+    <button id="oSize" title="Змінити розмір полотна на розмір кадру OBS">⇲ Взяти розмір з OBS</button>
+    <button id="oAdd" title="Створити джерело «Браузер» з цим віджетом у поточній сцені OBS">➕ Додати в поточну сцену OBS</button>
+    <button id="oFit" title="Задати наявним джерелам цього віджета розмір полотна й розтягнути на весь екран OBS">⤢ Підігнати під екран OBS</button>
+    <input type="text" id="url" readonly style="width:300px"><button id="ucp">Копіювати</button>
+    <span class="linkcap">Посилання цієї розкладки для джерела «Браузер» в OBS <span class="tipi" title="У редакторі обери формат полотна (YouTube або Twitch 16:9, TikTok 9:16 чи свій розмір), додай шари: віджети програми (чат, біжучий рядок, слайдшоу, відео, переможець) або чужий віджет за посиланням. Шари вільно перетягуються мишею, змінюють розмір за кути й краї, притягуються до сітки й одне до одного. Потім натисни «Додати в поточну сцену OBS»: програма сама створить джерело «Браузер» потрібного розміру й розтягне його на весь екран OBS. Якщо в OBS уже є джерело з цим посиланням, натисни «Підігнати під екран OBS». Для зв'язку з OBS ввімкни WebSocket в OBS і впиши пароль у «Для OBS → Зв'язок з OBS». Усі зміни з редактора потрапляють у OBS одразу. MultiChat має бути запущений.">ⓘ</span></span>
+    <span id="obsst"></span>
+  </footer>
+</div>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const ask = (title, text, ok) => { try { if (parent && parent !== window && typeof parent.askConfirm === 'function') return parent.askConfirm(title, text, ok); } catch {} return Promise.resolve(confirm(text)); };   // власне вікно підтвердження програми
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const S = { id: '', name: '', cfg: null, profiles: [], presets: [], sources: [], sel: null, scale: 1, pvReady: false, dirty: false };
+const PARENT = (() => { try { return parent !== window && parent.document ? parent : null; } catch { return null; } })();
+const THEME_SRC = PARENT || (() => { try { return window.opener && window.opener.document ? window.opener : null; } catch { return null; } })();   // в окремому вікні тему беремо з вікна програми
+const STANDALONE = !PARENT;
+const num = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
+const uid = () => Math.random().toString(36).slice(2, 10);
+const layer = () => S.cfg.layers.find(l => l.id === S.sel) || null;
+
+/* ---------- тема з вікна програми ---------- */
+const THEME_VARS = ['--bg', '--panel', '--surface', '--surface-raised', '--line', '--txt', '--mut', '--acc'];
+function syncTheme() {
+  if (!THEME_SRC) return;
+  try { const cs = THEME_SRC.getComputedStyle(THEME_SRC.document.documentElement); for (const v of THEME_VARS) { const x = cs.getPropertyValue(v).trim(); if (x) document.documentElement.style.setProperty(v, x); } document.documentElement.style.colorScheme = cs.colorScheme || 'dark'; } catch {}
+}
+syncTheme();
+try { if (THEME_SRC) new MutationObserver(syncTheme).observe(THEME_SRC.document.documentElement, { attributes: true }); } catch {}
+
+/* ---------- сервер ---------- */
+const api = async (url, body, method) => { const r = await fetch(url, { method: method || (body ? 'POST' : 'GET'), headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); const j = await r.json().catch(() => ({})); if (!r.ok && !j.error) j.error = 'Помилка ' + r.status; return j; };
+let saveT = 0, saving = false;
+const status = (t, err) => { $('st').textContent = t || ''; $('st').className = err ? 'err' : ''; };
+async function save(now) {
+  clearTimeout(saveT);
+  if (saving) { saveT = setTimeout(() => save(now), 300); return; }
+  saving = true; status('Зберігаю...');
+  const j = await api('/api/multi', { id: S.id, cfg: S.cfg });
+  saving = false;
+  if (j.ok) { S.dirty = false; status('✓ ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); $('st').title = 'Збережено'; } else status(j.error || 'Не вдалося зберегти', true);
+}
+function touch(from) {   // будь-яка зміна: перемалювати, показати в перегляді й (за потреби) зберегти
+  S.dirty = true;
+  renderBoxes(); renderList(); if (from !== 'props') renderProps(); pushPreview();
+  clearTimeout(saveT);
+  if (S.cfg.autosave) { status('Зміни...'); saveT = setTimeout(save, 600); } else status('● Є незбережені зміни', true);
+}
+let pvRaf = 0;
+function pushPreview() {
+  if (!S.pvReady || pvRaf) return;
+  pvRaf = requestAnimationFrame(() => { pvRaf = 0; try { $('pv').contentWindow.postMessage({ type: 'cfg', cfg: S.cfg }, location.origin); } catch {} });
+}
+window.addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.type === 'mvReady') { S.pvReady = true; pushPreview(); } });
+
+/* ---------- завантаження ---------- */
+async function load(id) {
+  const j = await api('/api/multi?p=' + encodeURIComponent(id || ''));
+  if (!j.cfg) { status('Не вдалося завантажити розкладку', true); return; }
+  S.id = j.id; S.name = j.name; S.cfg = j.cfg; S.profiles = j.profiles; S.presets = j.presets; S.sources = j.sources; S.sel = null; S.dirty = false;
+  try { localStorage.setItem('mwProfile', S.id); } catch {}
+  if (PARENT) { try { PARENT.postMessage({ type: 'mwProfile', id: S.id }, location.origin); } catch {} }
+  const want = '/multi.html?preview=1&p=' + encodeURIComponent(S.id);
+  if ($('pv').getAttribute('src') !== want) { S.pvReady = false; $('pv').src = want; }
+  fillToolbar(); layoutStage(); renderBoxes(); renderList(); renderProps(); pushPreview();
+  $('url').value = location.origin + '/multi.html?p=' + S.id;
+  status('');
+}
+function fillToolbar() {
+  const pr = $('prof'); pr.textContent = '';
+  for (const p of S.profiles) { const o = el('option', '', p.name); o.value = p.id; pr.append(o); }
+  pr.value = S.id;
+  const f = $('fmt'); f.textContent = '';
+  for (const p of S.presets) { const o = el('option', '', String(p[1]).replace(/\s*\(\s*\d+\s*[×x]\s*\d+\s*\)\s*$/, '')); o.title = p[1]; o.value = p[0]; f.append(o); }   // розмір видно в полях поруч, тож у назві формату його не дублюємо
+  f.value = S.cfg.format;
+  $('cw').value = S.cfg.canvasW; $('ch').value = S.cfg.canvasH; $('snap').checked = S.cfg.snap; $('grid').value = S.cfg.grid;
+  $('bgc').value = S.cfg.bgColor; $('bgo').value = S.cfg.bgOpacity; $('auto').checked = S.cfg.autosave;
+}
+
+/* ---------- полотно ---------- */
+function layoutStage() {
+  if (!S.cfg) return;
+  const W = S.cfg.canvasW, H = S.cfg.canvasH, z = $('zoom').value, sw = $('sw');
+  const s = z === 'fit' ? Math.min((sw.clientWidth - 24) / W, (sw.clientHeight - 24) / H) : Number(z);
+  S.scale = Math.max(0.02, s);
+  const w = Math.round(W * S.scale), h = Math.round(H * S.scale);
+  for (const id of ['stage', 'pv', 'ov']) { $(id).style.width = w + 'px'; $(id).style.height = h + 'px'; }
+  renderBoxes();
+}
+new ResizeObserver(layoutStage).observe($('sw'));
+const visOf = l => { const cl = l.cl || 0, ct = l.ct || 0, cr = l.cr || 0, cb = l.cb || 0; return { x: l.x + cl, y: l.y + ct, w: l.w - cl - cr, h: l.h - ct - cb }; };
+const snapOf = l => { const cl = l.cl || 0, ct = l.ct || 0, cr = l.cr || 0, cb = l.cb || 0; return { x: l.x, y: l.y, w: l.w, h: l.h, cl, ct, cr, cb, vw: l.w - cl - cr, vh: l.h - ct - cb, bw: l.bw, bh: l.bh }; };
+function renderBoxes() {
+  const ov = $('ov'), s = S.scale; if (!S.cfg) return;
+  ov.textContent = '';
+  for (const l of S.cfg.layers) {
+    const v = visOf(l), cropped = (l.cl || l.ct || l.cr || l.cb);
+    if (cropped && l.id === S.sel) { const f = el('div', 'fl'); f.dataset.fid = l.id; f.style.left = l.x * s + 'px'; f.style.top = l.y * s + 'px'; f.style.width = l.w * s + 'px'; f.style.height = l.h * s + 'px'; ov.append(f); }   // пунктир показує повний розмір обрізаного шару
+    const b = el('div', 'bx' + (l.id === S.sel ? ' sel' : '') + (l.visible === false ? ' hid' : '') + (l.locked ? ' lk' : ''));
+    b.dataset.id = l.id;
+    b.style.left = v.x * s + 'px'; b.style.top = v.y * s + 'px'; b.style.width = v.w * s + 'px'; b.style.height = v.h * s + 'px';
+    if (l.locked) b.append(el('span', 'lkic', '🔒'));
+    if (l.id === S.sel && !l.locked) for (const h of ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']) { const d = el('div', 'hd'); d.dataset.h = h; d.title = 'Потягни: змінити розмір. З Alt: обрізати'; b.append(d); }
+    ov.append(b);
+  }
+}
+function boxEl(id) { return $('ov').querySelector('.bx[data-id="' + id + '"]'); }
+function placeBox(l) {
+  const b = boxEl(l.id); if (!b) return; const s = S.scale, v = visOf(l);
+  b.style.left = v.x * s + 'px'; b.style.top = v.y * s + 'px'; b.style.width = v.w * s + 'px'; b.style.height = v.h * s + 'px';
+  const f = $('ov').querySelector('.fl[data-fid="' + l.id + '"]');
+  if (f) { f.style.left = l.x * s + 'px'; f.style.top = l.y * s + 'px'; f.style.width = l.w * s + 'px'; f.style.height = l.h * s + 'px'; }
+}
+
+/* ---------- прив'язка ---------- */
+function guidesFor(skipId) {   // вертикальні й горизонтальні лінії, до яких можна притягнутися: краї й центр полотна та видимих частин інших шарів
+  const W = S.cfg.canvasW, H = S.cfg.canvasH, xs = [0, W / 2, W], ys = [0, H / 2, H];
+  for (const l of S.cfg.layers) if (l.id !== skipId && l.visible !== false) { const v = visOf(l); xs.push(v.x, v.x + v.w / 2, v.x + v.w); ys.push(v.y, v.y + v.h / 2, v.y + v.h); }
+  return { xs, ys };
+}
+function snapAxis(cands, targets, thr) {   // cands: координати рухомих ліній; повертає { d, line } з найменшою відстанню
+  let best = null;
+  for (const c of cands) for (const t of targets) { const d = t - c; if (Math.abs(d) <= thr && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, line: t }; }
+  return best;
+}
+const gridSnap = v => { const g = S.cfg.grid; return Math.round(v / g) * g; };
+function drawGuides(gx, gy) {
+  const ov = $('ov'); ov.querySelectorAll('.gd').forEach(n => n.remove()); const s = S.scale;
+  for (const x of gx) { const d = el('div', 'gd'); d.style.left = x * s + 'px'; d.style.top = '0'; d.style.width = '1px'; d.style.height = '100%'; ov.append(d); }
+  for (const y of gy) { const d = el('div', 'gd'); d.style.top = y * s + 'px'; d.style.left = '0'; d.style.height = '1px'; d.style.width = '100%'; ov.append(d); }
+}
+
+/* ---------- мишка: перетягування, зміна розміру й обрізання (Alt, як в OBS) ---------- */
+function applyVisible(l, V, st) {   // новий видимий прямокутник V: масштабуємо весь шар разом з обрізанням і ставимо так, щоб видима частина збіглась із V
+  const fx = V.w / st.vw, fy = V.h / st.vh;
+  l.w = Math.max(10, Math.round(st.w * fx)); l.h = Math.max(10, Math.round(st.h * fy));
+  l.cl = Math.round(st.cl * fx); l.cr = Math.round(st.cr * fx); l.ct = Math.round(st.ct * fy); l.cb = Math.round(st.cb * fy);
+  l.x = Math.round(V.x - l.cl); l.y = Math.round(V.y - l.ct);
+  if (l.scale === false) { l.bw = l.w; l.bh = l.h; }   // без масштабування вмісту віджет перекомпоновується під новий розмір
+}
+let drag = null;
+$('ov').addEventListener('pointerdown', e => {
+  const hd = e.target.closest('.hd'), bx = e.target.closest('.bx');
+  if (!bx) { if (S.sel) { S.sel = null; renderBoxes(); renderList(); renderProps(); } return; }
+  const id = bx.dataset.id, l = S.cfg.layers.find(x => x.id === id); if (!l) return;
+  if (S.sel !== id) { S.sel = id; renderBoxes(); renderList(); renderProps(); }
+  if (l.locked) return;
+  $('ov').setPointerCapture(e.pointerId);
+  drag = { id, mode: hd ? 'resize' : 'move', h: hd ? hd.dataset.h : '', sx: e.clientX, sy: e.clientY, st: snapOf(l), moved: false };
+  e.preventDefault();
+});
+$('ov').addEventListener('pointermove', e => {
+  if (!drag) return;
+  const l = S.cfg.layers.find(x => x.id === drag.id); if (!l) return;
+  const st = drag.st, k = 1 / S.scale, dx = (e.clientX - drag.sx) * k, dy = (e.clientY - drag.sy) * k, thr = 6 * k;
+  const useSnap = S.cfg.snap && !e.ctrlKey, g = guidesFor(l.id); let gx = [], gy = [];
+  if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 2 * k) return;
+  drag.moved = true;
+  const V0 = { x: st.x + st.cl, y: st.y + st.ct, w: st.vw, h: st.vh };
+  const bxe = boxEl(l.id); if (bxe) bxe.classList.toggle('crop', drag.mode === 'resize' && e.altKey);
+  if (drag.mode === 'move') {
+    let x = V0.x + dx, y = V0.y + dy;
+    if (e.shiftKey) { if (Math.abs(dx) > Math.abs(dy)) y = V0.y; else x = V0.x; }
+    if (useSnap) {
+      const sx = snapAxis([x, x + V0.w / 2, x + V0.w], g.xs, thr), sy = snapAxis([y, y + V0.h / 2, y + V0.h], g.ys, thr);
+      if (sx) { x += sx.d; gx.push(sx.line); } else x = gridSnap(x);
+      if (sy) { y += sy.d; gy.push(sy.line); } else y = gridSnap(y);
+    }
+    l.x = Math.round(x - st.cl); l.y = Math.round(y - st.ct);
+  } else if (e.altKey) {   // Alt: обрізання. Розмір і положення лишаються, ховається смужка з того боку, за який тягнемо
+    const dir = drag.h;
+    l.x = st.x; l.y = st.y; l.w = st.w; l.h = st.h; l.cl = st.cl; l.cr = st.cr; l.ct = st.ct; l.cb = st.cb;
+    if (dir.includes('w')) l.cl = Math.round(Math.min(Math.max(0, st.cl + dx), st.w - st.cr - 10));
+    if (dir.includes('e')) l.cr = Math.round(Math.min(Math.max(0, st.cr - dx), st.w - st.cl - 10));
+    if (dir.includes('n')) l.ct = Math.round(Math.min(Math.max(0, st.ct + dy), st.h - st.cb - 10));
+    if (dir.includes('s')) l.cb = Math.round(Math.min(Math.max(0, st.cb - dy), st.h - st.ct - 10));
+    if (l.scale === false) { l.bw = st.bw; l.bh = st.bh; }
+  } else {
+    let x = V0.x, y = V0.y, w = V0.w, h = V0.h; const dir = drag.h, ratio = V0.w / V0.h;
+    if (dir.includes('e')) w = V0.w + dx; if (dir.includes('s')) h = V0.h + dy;
+    if (dir.includes('w')) { w = V0.w - dx; x = V0.x + dx; } if (dir.includes('n')) { h = V0.h - dy; y = V0.y + dy; }
+    if (useSnap) {   // притягуємо ті краї, що рухаються
+      if (dir.includes('e')) { const r = x + w, s2 = snapAxis([r], g.xs, thr); if (s2) { w += s2.d; gx.push(s2.line); } else w = gridSnap(r) - x; }
+      if (dir.includes('w')) { const s2 = snapAxis([x], g.xs, thr); let nx = s2 ? x + s2.d : gridSnap(x); if (s2) gx.push(s2.line); w += x - nx; x = nx; }
+      if (dir.includes('s')) { const b = y + h, s2 = snapAxis([b], g.ys, thr); if (s2) { h += s2.d; gy.push(s2.line); } else h = gridSnap(b) - y; }
+      if (dir.includes('n')) { const s2 = snapAxis([y], g.ys, thr); let ny = s2 ? y + s2.d : gridSnap(y); if (s2) gy.push(s2.line); h += y - ny; y = ny; }
+    }
+    if (e.shiftKey && dir.length === 2) { h = w / ratio; if (dir.includes('n')) y = V0.y + V0.h - h; if (dir.includes('w')) x = V0.x + V0.w - w; }
+    if (w < 20) { if (dir.includes('w')) x -= 20 - w; w = 20; } if (h < 20) { if (dir.includes('n')) y -= 20 - h; h = 20; }
+    applyVisible(l, { x, y, w, h }, st);
+  }
+  drawGuides(gx, gy); placeBox(l); pushPreview(); syncProps(l);
+});
+const endDrag = () => { if (!drag) return; const moved = drag.moved, id = drag.id; drag = null; $('ov').querySelectorAll('.gd').forEach(n => n.remove()); const b = boxEl(id); if (b) b.classList.remove('crop'); if (moved) touch('props'); };
+$('ov').addEventListener('pointerup', endDrag); $('ov').addEventListener('pointercancel', endDrag);
+document.addEventListener('keydown', e => { if (e.key === 'Alt') { document.body.classList.add('alt'); e.preventDefault(); } });
+document.addEventListener('keyup', e => { if (e.key === 'Alt') document.body.classList.remove('alt'); });
+addEventListener('blur', () => document.body.classList.remove('alt'));
+
+/* ---------- шари ---------- */
+const DEF = { chat: [.28, .6], ticker: [1, 0], fortune: [.5, .5], slideshow: [.3, .3], video: [.5, .28], winner: [.5, .3], reward: [.5, .5], snow: [1, 1], url: [.4, .4] };
+function addLayer(kind, profile) {
+  const W = S.cfg.canvasW, H = S.cfg.canvasH;
+  if (S.cfg.layers.length >= 40) { status('Максимум 40 шарів', true); return; }
+  const d = DEF[kind] || DEF.url; let w = Math.round(W * d[0]), h = Math.round(H * d[1]);
+  if (kind === 'ticker') h = Math.max(60, Math.round(H * .08));
+  if (kind === 'slideshow') { w = h = Math.round(Math.min(W, H) * .3); }
+  if (kind === 'fortune') { w = h = Math.round(Math.min(W, H) * .5); }
+  if (kind === 'video') h = Math.round(w * 9 / 16);
+  let x = Math.round((W - w) / 2), y = Math.round((H - h) / 2); if (kind === 'ticker') { x = 0; y = H - h; }
+  const src = S.sources.find(s => s.kind === kind), pn = src && src.profiles.find(p => p.id === profile);
+  const l = { id: uid(), type: kind === 'url' ? 'url' : 'widget', name: kind === 'url' ? 'Зовнішній віджет' : (src ? src.label : 'Шар') + (pn && src.profiles.length > 1 ? ' (' + pn.name + ')' : ''), kind: kind === 'url' ? 'chat' : kind, profile: kind === 'url' ? '' : (profile || (src && src.profiles[0] && src.profiles[0].id) || 'main'), url: '', tr: false, trc: '#17151f', trt: 14, x: S.cfg.snap ? gridSnap(x) : x, y: S.cfg.snap ? gridSnap(y) : y, w, h, bw: w, bh: h, scale: true, cl: 0, ct: 0, cr: 0, cb: 0, visible: true, locked: false, opacity: 100, radius: 0 };
+  S.cfg.layers.push(l); S.sel = l.id; touch();
+  if (kind === 'reward' && profile) {   // нагороду тепер показує шар, тож окреме джерело rewards.html її пропускає (змінюється в налаштуваннях нагороди)
+    fetch('/api/rewards').then(r => r.json()).then(j => { const rule = (j.rules || []).find(x => x.id === profile); if (!rule || rule.inLayer) return; rule.inLayer = true; return fetch('/api/rewards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rules: j.rules }) }); }).catch(() => {});
+  }
+}
+function removeLayer(id) { S.cfg.layers = S.cfg.layers.filter(l => l.id !== id); if (S.sel === id) S.sel = null; touch(); }
+function dupLayer(id) { const l = S.cfg.layers.find(x => x.id === id); if (!l || S.cfg.layers.length >= 40) return; const c = { ...l, id: uid(), name: (l.name || 'Шар') + ' (копія)', x: l.x + S.cfg.grid * 2, y: l.y + S.cfg.grid * 2, locked: false }; S.cfg.layers.splice(S.cfg.layers.indexOf(l) + 1, 0, c); S.sel = c.id; touch(); }
+function moveZ(id, d) { const a = S.cfg.layers, i = a.findIndex(l => l.id === id), j = i + d; if (i < 0 || j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; touch(); }
+function renderList() {
+  const box = $('ll'); box.textContent = '';
+  if (!S.cfg.layers.length) { box.append(el('p', 'note', 'Шарів ще немає. Додай віджет програми або зовнішнє посилання кнопкою вище.')); return; }
+  [...S.cfg.layers].reverse().forEach(l => {
+    const row = el('div', 'ly' + (l.id === S.sel ? ' sel' : '') + (l.visible === false ? ' off' : ''));
+    const eye = el('button', l.visible === false ? 'off' : '', '👁'); eye.title = l.visible === false ? 'Показати шар' : 'Сховати шар';
+    eye.onclick = e => { e.stopPropagation(); l.visible = l.visible === false; touch(); };
+    const lk = el('button', l.locked ? '' : 'off', l.locked ? '🔒' : '🔓'); lk.title = l.locked ? 'Розблокувати (можна рухати мишею)' : 'Заблокувати від випадкового переміщення';
+    lk.onclick = e => { e.stopPropagation(); l.locked = !l.locked; touch(); };
+    const up = el('button', '', '↑'); up.title = 'Вперед (вище)'; up.onclick = e => { e.stopPropagation(); moveZ(l.id, 1); };
+    const dn = el('button', '', '↓'); dn.title = 'Назад (нижче)'; dn.onclick = e => { e.stopPropagation(); moveZ(l.id, -1); };
+    row.append(eye, lk, el('span', 't', l.name || 'Шар'), up, dn);
+    row.onclick = () => { S.sel = l.id; renderBoxes(); renderList(); renderProps(); };
+    box.append(row);
+  });
+}
+
+/* ---------- властивості ---------- */
+function syncProps(l) { const f = k => $('pp').querySelector('[data-f="' + k + '"]'); for (const k of ['x', 'y', 'w', 'h', 'bw', 'bh', 'cl', 'ct', 'cr', 'cb']) { const i = f(k); if (i && document.activeElement !== i) i.value = l[k] || 0; } const sc = $('pp').querySelector('#scinfo'); if (sc) sc.textContent = 'Масштаб вмісту: ' + Math.round(l.w / (l.bw || l.w) * 100) + '% × ' + Math.round(l.h / (l.bh || l.h) * 100) + '%'; }
+function renderProps() {
+  const pp = $('pp'); pp.textContent = '';
+  const l = layer();
+  pp.append(el('h4', '', 'Властивості шару'));
+  if (!l) { pp.append(el('p', 'note', 'Вибери шар у списку чи на полотні. Шари можна вільно перетягувати мишею й тягнути за кути та краї: віджет збільшується разом із шаром (Shift зберігає пропорції). З натиснутим Alt ручка не змінює розмір, а обрізає шар, як в OBS. Ctrl вимикає прив’язку, стрілки зсувають на 1 px (Shift: на крок сітки), Delete видаляє, Ctrl+D дублює.')); return; }
+  const row = (label, node) => { const r = el('div', 'row'); r.append(el('label', '', label), node); pp.append(r); return r; };
+  const text = (key, ph) => { const i = el('input'); i.type = 'text'; i.value = l[key] || ''; i.placeholder = ph || ''; i.oninput = () => { l[key] = i.value; touch('props'); }; return i; };
+  row('Назва', text('name', 'Назва шару'));
+  if (l.type === 'widget') {
+    const ks = el('select'); for (const s of S.sources) { const o = el('option', '', s.label); o.value = s.kind; ks.append(o); } ks.value = l.kind;
+    const ps = el('select'); const fill = () => { ps.textContent = ''; const src = S.sources.find(s => s.kind === l.kind); for (const p of (src ? src.profiles : [])) { const o = el('option', '', p.name); o.value = p.id; ps.append(o); } if (![...ps.options].some(o => o.value === l.profile) && ps.options.length) l.profile = ps.options[0].value; ps.value = l.profile; };
+    ks.onchange = () => { l.kind = ks.value; fill(); touch('props'); }; ps.onchange = () => { l.profile = ps.value; touch('props'); };
+    fill(); row('Віджет', ks); row('Профіль', ps);
+    if (['chat', 'fortune', 'slideshow', 'video', 'winner', 'reward'].includes(l.kind)) {   // кнопка перевірки віджета програми: показує його в OBS прямо зараз
+      const tb = el('button', 'sm', '▶ Тест віджета'); tb.type = 'button'; let chatOn = false;
+      const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(async r => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('Помилка ' + r.status)); return j; });
+      tb.title = l.kind === 'chat' ? 'Віджет чату безперервно показує зразки повідомлень, доки не натиснеш ще раз' : l.kind === 'fortune' ? 'Крутить колесо в OBS прямо зараз (переможця обирає програма випадково)' : l.kind === 'winner' ? 'Показує тестового переможця на 8 секунд' : l.kind === 'reward' ? 'Запускає нагороду з тестовим глядачем' : 'Починає показ спочатку';
+      tb.onclick = async () => {
+        try {
+          if (l.kind === 'chat') { const j = await post('/api/chat-widget-test', { id: l.profile, on: !chatOn }); chatOn = !!j.on; tb.textContent = chatOn ? '⏹ Зупинити тест' : '▶ Тест віджета'; }
+          else if (l.kind === 'fortune') await post('/api/fortune/spin', { id: l.profile });
+          else if (l.kind === 'slideshow' || l.kind === 'video') await post('/api/' + l.kind + '/ctl', { id: l.profile, cmd: 'restart' });
+          else if (l.kind === 'winner') { await post('/api/winner-show', { raffle: l.profile, user: 'Тестовий переможець', platform: 'twitch', msg: 'Вітаємо з перемогою!' }); setTimeout(() => post('/api/winner-show', { hide: true, raffle: l.profile }).catch(() => {}), 8000); }
+          else await post('/api/rewards/test', { id: l.profile });
+          status('Тест запущено');
+        } catch (e) { status(e.message, true); }
+      };
+      row('Перевірка', tb);
+    }
+    if (l.kind === 'reward') pp.append(el('p', 'note', 'Нагорода показується в цьому шарі: картинка чи відео вписуються в усю його область, звук грає тут же. Окреме джерело rewards.html цю нагороду пропускає (повернути можна в налаштуваннях нагороди, галочка «Показувати лише шаром»).'));
+    if (l.kind === 'snow') pp.append(el('p', 'note', 'Сніг береться з налаштувань програми (Програма → Вигляд → Зима): кількість, швидкість, розмір, вітер. Розтягни шар на всю область, де має падати сніг.'));
+  } else {
+    const info = (txt, host) => {   // ⓘ: підказка при наведенні, а по кліку розгортається під рядком
+      const b = el('button', 'ib', 'ⓘ'); b.type = 'button'; b.title = txt; const n = el('p', 'note', txt); n.hidden = true;
+      b.onclick = () => { n.hidden = !n.hidden; }; host.append(b); host.after(n); return b;
+    };
+    const ur = row('Адреса', text('url', 'https://...'));
+    info('Вставляй посилання на віджет з іншого сервісу (алерти, цілі, чат). Деякі сайти забороняють показ у чужих вікнах: тоді шар лишиться порожнім, і такий віджет доведеться додавати в OBS окремим джерелом.', ur);
+    const trl = el('label', 'chk'), tri = el('input'); tri.type = 'checkbox'; tri.checked = !!l.tr; tri.title = 'Вирізає з віджета колір його фону (кольоровий ключ). Працює з будь-яким сервісом.';
+    trl.append(tri, document.createTextNode(' Прозорий фон (вирізати колір фону)')); const trr = el('div', 'row'); trr.append(trl); pp.append(trr);
+    const DEF_C = '#17151f', DEF_T = 14;
+    const trc = el('input'); trc.type = 'color'; trc.value = l.trc || DEF_C; trc.oninput = () => { l.trc = trc.value; touch('props'); };
+    const trt = el('input'); trt.type = 'number'; trt.min = 0; trt.max = 80; trt.value = l.trt == null ? DEF_T : l.trt; trt.title = 'Допуск: наскільки схожі на цей колір відтінки теж стають прозорими'; trt.oninput = () => { l.trt = num(trt.value, 0, 80, DEF_T); touch('props'); };
+    const trp = el('button', ''); trp.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>'; trp.type = 'button'; trp.title = 'Піпетка: вибрати колір фону прямо з екрана'; trp.onclick = async () => { if (!window.EyeDropper) { status('Піпетка недоступна в цьому браузері: вибери колір вручну', true); return; } try { const r = await new EyeDropper().open(); l.trc = r.sRGBHex.toLowerCase(); trc.value = l.trc; touch('props'); } catch {} };
+    const trx = el('button', '', '↺'); trx.type = 'button'; trx.title = 'Скинути колір і допуск до стандартних'; trx.onclick = () => { l.trc = DEF_C; l.trt = DEF_T; trc.value = DEF_C; trt.value = DEF_T; touch('props'); };
+    const trw = el('div', 'krow'); const mk = (t2, c) => { const d = el('div', 'kc'); d.append(el('span', '', t2), c); return d; }; trw.append(mk('Колір', trc), mk('Допуск', trt), mk('Піпетка', trp), mk('Скинути', trx));
+    const kn = info('Колір фону візьми піпеткою з перегляду. Краї тексту можуть лишати ледь помітну темну кайму: збільш допуск на 5-10.', trw);
+    const upd = () => { trw.style.display = l.tr ? '' : 'none'; if (!l.tr) kn.nextSibling.hidden = true; }; tri.onchange = () => { l.tr = tri.checked; upd(); touch(); }; pp.append(trw); upd();
+  }
+  const num4 = (list, label0) => {
+    const g = el('div', 'grid4');
+    for (const [k, t, lo] of list) { const lb = el('label', '', t), i = el('input'); i.type = 'number'; i.dataset.f = k; i.value = l[k] || 0; i.oninput = () => { const v = parseInt(i.value, 10); if (!Number.isFinite(v)) return; l[k] = Math.max(lo, v); if (k === 'bw' || k === 'bh') { /* базовий розмір змінено вручну */ } if (l.scale === false && (k === 'w' || k === 'h')) { l.bw = l.w; l.bh = l.h; } touch('props'); syncProps(l); }; lb.append(i); g.append(lb); }
+    if (label0) pp.append(el('p', 'note', label0));
+    pp.append(g);
+  };
+  num4([['x', 'X', -20000], ['y', 'Y', -20000], ['w', 'Ш', 10], ['h', 'В', 10]]);
+  const al = el('div', 'al');
+  const W = S.cfg.canvasW, H = S.cfg.canvasH;
+  const btn = (t, title, fn) => { const b = el('button', '', t); b.title = title; b.onclick = () => { fn(); touch(); }; al.append(b); };
+  const vis = () => visOf(l);   // вирівнювання рахується за видимою (обрізаною) частиною
+  btn('⇤', 'До лівого краю', () => { l.x = -(l.cl || 0); }); btn('↔', 'По центру по горизонталі', () => { l.x = Math.round((W - vis().w) / 2) - (l.cl || 0); }); btn('⇥', 'До правого краю', () => { l.x = W - vis().w - (l.cl || 0); }); btn('⊡', 'По центру полотна', () => { const v = vis(); l.x = Math.round((W - v.w) / 2) - (l.cl || 0); l.y = Math.round((H - v.h) / 2) - (l.ct || 0); });
+  btn('⤒', 'До верхнього краю', () => { l.y = -(l.ct || 0); }); btn('↕', 'По центру по вертикалі', () => { l.y = Math.round((H - vis().h) / 2) - (l.ct || 0); }); btn('⤓', 'До нижнього краю', () => { l.y = H - vis().h - (l.ct || 0); }); btn('⤢', 'На весь екран полотна', () => { applyVisible(l, { x: 0, y: 0, w: W, h: H }, snapOf(l)); });
+  pp.append(al);
+  // масштаб вмісту: віджет малюється в «базовому» розмірі й розтягується до розміру шару, як джерело в OBS
+  const scl = el('label', 'chk'), sci = el('input'); sci.type = 'checkbox'; sci.checked = l.scale !== false; sci.title = 'Увімкнено: збільшуєш шар - збільшується й сам віджет (текст, картинки). Вимкнено: віджет просто отримує більше місця й перекомпоновується.';
+  sci.onchange = () => { l.scale = sci.checked; if (!l.scale) { l.bw = l.w; l.bh = l.h; } touch(); };
+  scl.append(sci, document.createTextNode(' Масштабувати віджет разом із шаром')); const sr = el('div', 'row'); sr.append(scl); pp.append(sr);
+  pp.append(Object.assign(el('p', 'note'), { id: 'scinfo', textContent: 'Масштаб вмісту: ' + Math.round(l.w / (l.bw || l.w) * 100) + '% × ' + Math.round(l.h / (l.bh || l.h) * 100) + '%' }));
+  const sb = el('div', 'row');
+  const b100 = el('button', '', '100%'); b100.title = 'Повернути вмісту його базовий розмір (без збільшення)'; b100.onclick = () => { const st = snapOf(l), v = visOf(l); applyVisible(l, { x: v.x, y: v.y, w: v.w * (l.bw / l.w), h: v.h * (l.bh / l.h) }, st); touch(); };
+  const bb = el('button', '', 'Прийняти розмір як базовий'); bb.title = 'Віджет перекомпонується під поточний розмір шару, а масштаб стане 100%'; bb.onclick = () => { l.bw = l.w; l.bh = l.h; touch(); };
+  sb.append(b100, bb); pp.append(sb);
+  num4([['bw', 'Базова Ш', 10], ['bh', 'Базова В', 10]]);
+  num4([['cl', 'Обріз. зліва', 0], ['cr', 'справа', 0], ['ct', 'зверху', 0], ['cb', 'знизу', 0]], 'Обрізання: можна тягнути за ручки з натиснутим Alt, як в OBS.');
+  const rc = el('div', 'row'); const rb = el('button', '', 'Скинути обрізання'); rb.onclick = () => { l.cl = l.ct = l.cr = l.cb = 0; touch(); }; rc.append(rb); pp.append(rc);
+  const op = el('input'); op.type = 'range'; op.min = 0; op.max = 100; op.value = l.opacity; const ov = el('span', '', l.opacity + '%');
+  op.oninput = () => { l.opacity = Number(op.value); ov.textContent = l.opacity + '%'; touch('props'); };
+  const r1 = row('Прозорість', op); r1.append(ov);
+  const rd = el('input'); rd.type = 'number'; rd.min = 0; rd.max = 1000; rd.value = l.radius; rd.oninput = () => { l.radius = num(rd.value, 0, 1000, 0); touch('props'); };
+  row('Радіус', rd);
+  const chk = (label, key, inv) => { const lb = el('label', 'chk'), i = el('input'); i.type = 'checkbox'; i.checked = inv ? l[key] !== false : !!l[key]; i.onchange = () => { l[key] = i.checked; touch(); }; lb.append(i, document.createTextNode(' ' + label)); const r = el('div', 'row'); r.append(lb); pp.append(r); };
+  chk('Показувати', 'visible', true); chk('Заблокувати від випадкового переміщення', 'locked');
+  const r = el('div', 'row');
+  const d = el('button', '', '⧉ Дублювати'); d.onclick = () => dupLayer(l.id);
+  const x = el('button', '', '🗑 Видалити'); x.onclick = () => removeLayer(l.id);
+  r.append(d, x); pp.append(r);
+}
+
+/* ---------- панель зверху ---------- */
+function setCanvas(w, h, format) {
+  const c = S.cfg, ow = c.canvasW, oh = c.canvasH;
+  if (Math.abs(ow / oh - w / h) < 0.01 && (ow !== w || oh !== h)) { const k = w / ow; for (const l of c.layers) { l.x = Math.round(l.x * k); l.y = Math.round(l.y * k); l.w = Math.max(10, Math.round(l.w * k)); l.h = Math.max(10, Math.round(l.h * k)); l.cl = Math.round((l.cl || 0) * k); l.cr = Math.round((l.cr || 0) * k); l.ct = Math.round((l.ct || 0) * k); l.cb = Math.round((l.cb || 0) * k); if (l.scale === false) { l.bw = l.w; l.bh = l.h; } } }   // те саме співвідношення сторін: шари масштабуються разом із полотном
+  c.canvasW = w; c.canvasH = h;
+  const p = S.presets.find(p => p[0] === format) || S.presets.find(p => p[2] === w && p[3] === h) || S.presets[S.presets.length - 1];
+  c.format = p ? p[0] : 'custom';
+  fillToolbar(); layoutStage(); touch();
+}
+$('fmt').onchange = () => { const p = S.presets.find(p => p[0] === $('fmt').value); if (p && p[2]) setCanvas(p[2], p[3], p[0]); else { S.cfg.format = 'custom'; touch(); } };
+const sizeChange = () => { const w = num($('cw').value, 100, 7680, S.cfg.canvasW), h = num($('ch').value, 100, 7680, S.cfg.canvasH); setCanvas(w, h); };
+$('cw').onchange = sizeChange; $('ch').onchange = sizeChange;
+$('snap').onchange = () => { S.cfg.snap = $('snap').checked; touch('props'); };
+$('grid').onchange = () => { S.cfg.grid = num($('grid').value, 1, 200, 10); $('grid').value = S.cfg.grid; touch('props'); };
+$('bgc').oninput = () => { S.cfg.bgColor = $('bgc').value; touch('props'); };
+$('bgo').onchange = () => { S.cfg.bgOpacity = num($('bgo').value, 0, 100, 0); $('bgo').value = S.cfg.bgOpacity; touch('props'); };
+$('auto').onchange = () => { S.cfg.autosave = $('auto').checked; touch('props'); if (S.cfg.autosave) save(); };
+$('zoom').onchange = layoutStage;
+$('save').onclick = () => save(true);
+if (STANDALONE) $('detach').hidden = true;
+$('detach').onclick = () => {   // редактор у власному вікні без решти функцій програми, зручно на великому екрані
+  window.open('/multi-editor.html?p=' + encodeURIComponent(S.id) + '&win=1', 'mwEditorWin', 'width=1700,height=950');
+  try { PARENT.postMessage({ type: 'mwDetached' }, location.origin); } catch {}
+};
+document.title = (STANDALONE ? 'MultiChat: мульти-віджет' : document.title);
+$('prof').onchange = async () => { if (S.dirty) await save(true); load($('prof').value); };
+let nmMode = '';
+const nmOpen = mode => { nmMode = mode; $('nmrow').hidden = false; $('nmin').value = mode === 'rename' ? S.name : mode === 'dup' ? S.name + ' (копія)' : ''; $('nmin').focus(); $('nmin').select(); };
+$('pNew').onclick = () => nmOpen('new'); $('pDup').onclick = () => nmOpen('dup'); $('pRen').onclick = () => nmOpen('rename');
+$('nmno').onclick = () => { $('nmrow').hidden = true; };
+$('nmin').addEventListener('keydown', e => { if (e.key === 'Enter') $('nmok').click(); else if (e.key === 'Escape') { e.stopPropagation(); $('nmno').click(); } });
+$('nmok').onclick = async () => {
+  const name = $('nmin').value.trim(); if (!name) return;
+  if (S.dirty) await save(true);
+  const j = await api('/api/multi/profile', nmMode === 'rename' ? { action: 'rename', id: S.id, name } : { action: 'create', name, from: nmMode === 'dup' ? S.id : '' });
+  if (!j.ok) { status(j.error || 'Помилка', true); return; }
+  $('nmrow').hidden = true; load(j.id);
+};
+$('pDel').onclick = async () => {
+  if (S.profiles.length <= 1) { status('Останню розкладку видалити не можна', true); return; }
+  if (!(await ask('Видалити розкладку?', 'Розкладку «' + S.name + '» буде видалено. Віджет із цим посиланням в OBS перестане працювати.', 'Видалити'))) return;
+  const j = await api('/api/multi/profile', { action: 'delete', id: S.id }); if (!j.ok) { status(j.error || 'Помилка', true); return; } load(j.id);
+};
+
+/* ---------- додавання шару ---------- */
+$('addb').onclick = e => {
+  e.stopPropagation(); const m = $('addm');
+  if (!m.hidden) { m.hidden = true; return; }
+  m.textContent = '';
+  // меню розкладено за функціями: чат, рядок, слайдшоу, відео, розіграш, нагороди, зима
+  const HEADS = [['chat', 'Чат'], ['ticker', 'Біжучий рядок'], ['fortune', 'Колесо фортуни'], ['slideshow', 'Слайдшоу картинок'], ['video', 'Відео'], ['winner', 'Розіграш'], ['reward', 'Нагороди за бали каналу'], ['snow', 'Зима']];
+  const listed = new Set();
+  const addItems = (s, head) => {
+    if (!s.profiles.length) return; listed.add(s.kind);
+    m.append(el('h5', '', head));
+    const many = s.profiles.length > 1 || s.kind === 'winner' || s.kind === 'reward';
+    if (many) { for (const p of s.profiles) { const b = el('button', '', p.name); b.onclick = () => { m.hidden = true; addLayer(s.kind, p.id); }; m.append(b); } }
+    else { const b = el('button', '', s.kind === 'snow' ? '❄️ Сніг' : s.label); b.onclick = () => { m.hidden = true; addLayer(s.kind, s.profiles[0].id); }; m.append(b); }
+  };
+  for (const [kind, head] of HEADS) { const s = S.sources.find(x => x.kind === kind); if (s) addItems(s, head); }
+  for (const s of S.sources) if (!listed.has(s.kind)) addItems(s, s.label);
+  m.append(el('h5', '', 'Чужий віджет'));
+  const u = el('button', '', '🔗 Зовнішнє посилання...'); u.onclick = () => { m.hidden = true; addLayer('url'); }; m.append(u);
+  m.hidden = false;
+};
+document.addEventListener('click', e => { if (!e.target.closest('#add')) $('addm').hidden = true; });
+
+/* ---------- клавіатура ---------- */
+document.addEventListener('keydown', e => {
+  const t = e.target; if (t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) return;
+  const l = layer();
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(true); return; }
+  if (!l) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); dupLayer(l.id); return; }
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeLayer(l.id); return; }
+  if (e.key === 'Escape') { S.sel = null; renderBoxes(); renderList(); renderProps(); return; }
+  const d = e.shiftKey ? Math.max(S.cfg.grid, 10) : 1; let hit = true;
+  if (l.locked) return;
+  if (e.key === 'ArrowLeft') l.x -= d; else if (e.key === 'ArrowRight') l.x += d; else if (e.key === 'ArrowUp') l.y -= d; else if (e.key === 'ArrowDown') l.y += d; else hit = false;
+  if (hit) { e.preventDefault(); touch(); }
+});
+
+/* ---------- OBS ---------- */
+const obsMsg = (t, cls) => { $('obsst').textContent = t || ''; $('obsst').className = cls || ''; };
+async function obs(action) {
+  const btns = ['oSize', 'oAdd', 'oFit'].map($); btns.forEach(b => b.disabled = true); obsMsg('Зв’язуюсь з OBS...');
+  try {
+    if (action !== 'size') await save(true);
+    const j = await api('/api/multi/obs', { id: S.id, action });
+    if (!j.ok) { obsMsg(j.error || 'Не вдалося виконати дію в OBS.', 'err'); return; }
+    if (action === 'size') {
+      if (j.baseW && j.baseH) { setCanvas(j.baseW, j.baseH); obsMsg('Розмір кадру OBS: ' + j.baseW + ' × ' + j.baseH + '. Полотно змінено.', 'ok'); } else obsMsg('OBS не повернув розмір кадру.', 'err');
+    } else if (action === 'add') obsMsg('Додано джерело «' + j.created + '» у сцену «' + j.scene + '» і підігнано під екран OBS (' + j.baseW + ' × ' + j.baseH + ').', 'ok');
+    else obsMsg(j.sources ? 'Підігнано джерел: ' + j.sources + ', елементів сцен: ' + j.items + ' (екран OBS ' + j.baseW + ' × ' + j.baseH + ').' : 'В OBS немає джерел «Браузер» з адресою цього віджета. Натисни «Додати в поточну сцену OBS».', j.sources ? 'ok' : 'err');
+  } catch { obsMsg('Немає зв’язку із сервером програми.', 'err'); }
+  finally { btns.forEach(b => b.disabled = false); }
+}
+$('oSize').onclick = () => obs('size'); $('oAdd').onclick = () => obs('add'); $('oFit').onclick = () => obs('fit');
+$('ucp').onclick = async () => { try { await navigator.clipboard.writeText($('url').value); } catch { $('url').select(); document.execCommand('copy'); } const b = $('ucp'); b.textContent = 'Скопійовано ✓'; setTimeout(() => { b.textContent = 'Копіювати'; }, 1500); };
+$('url').addEventListener('focus', e => e.target.select());
+window.addEventListener('beforeunload', () => { if (S.dirty && S.cfg && S.cfg.autosave) { try { navigator.sendBeacon('/api/multi', new Blob([JSON.stringify({ id: S.id, cfg: S.cfg })], { type: 'application/json' })); } catch {} } });
+(function connectWs() {   // зміни з іншого вікна редактора (чи з іншого пристрою) підхоплюються, якщо тут немає незбережених правок
+  const w = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  w.onmessage = e => {
+    try {
+      const m = JSON.parse(e.data);
+      if (!m || m.type !== 'multi' || m.id !== S.id || !m.cfg || drag || S.dirty || saving || !S.cfg) return;
+      if (JSON.stringify(m.cfg) === JSON.stringify(S.cfg)) return;
+      S.cfg = m.cfg; if (S.sel && !layer()) S.sel = null;
+      fillToolbar(); layoutStage(); renderBoxes(); renderList(); renderProps(); pushPreview();
+    } catch {}
+  };
+  w.onclose = () => setTimeout(connectWs, 2000);
+  w.onerror = () => { try { w.close(); } catch {} };
+})();
+load(new URLSearchParams(location.search).get('p') || (() => { try { return localStorage.getItem('mwProfile') || ''; } catch { return ''; } })());
+})();
+</script>
+<script src="/tooltip-embed.js"></script>
+<script src="/glyph-icons.js"></script>
+</body>
+</html>

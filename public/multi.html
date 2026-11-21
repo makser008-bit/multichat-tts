@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MultiChat - мульти-віджет</title>
+<style>
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif}
+body.preview{background:repeating-conic-gradient(#2b2b36 0 25%,#1d1d26 0 50%) 0 0/24px 24px}
+#cv{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden}
+.ly{position:absolute;overflow:hidden}
+.ly.hid{display:none}
+.ly iframe{position:absolute;left:0;top:0;border:0;background:transparent;transform-origin:0 0}
+body.preview .ly iframe{pointer-events:none}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="kf"></defs></svg>
+<div id="cv"></div>
+<script>
+(() => {
+const q = new URLSearchParams(location.search), PREVIEW = q.get('preview') === '1', PROFILE = q.get('p') || '';
+const cv = document.getElementById('cv');
+if (PREVIEW) document.body.classList.add('preview');
+const KINDS = { chat: ['/chat-widget.html', 'p'], ticker: ['/ticker.html', 'p'], fortune: ['/fortune.html', 'p'], slideshow: ['/slideshow.html', 'p'], video: ['/video.html', 'p'], winner: ['/winner-widget.html', 'cat'], reward: ['/rewards.html', 'rule'], snow: ['/snow.html', 'p'] };
+const srcOf = l => {
+  if (l.type === 'widget') { const k = KINDS[l.kind]; return k ? k[0] + '?' + k[1] + '=' + encodeURIComponent(l.profile || '') : ''; }
+  return /^https?:\/\/\S+$/i.test(l.url || '') ? l.url : '';
+};
+const rgba = (hex, a) => { const n = parseInt(String(hex).slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+const idOk = s => /^[a-z0-9]{1,16}$/.test(String(s || ''));
+let cfg = null, myId = '';
+const nodes = new Map();   // id шару -> { el, fr, src }
+
+const kdefs = document.getElementById('kf');
+// «Прозорий фон»: колір фону сервісу вирізається з картинки шару (кольоровий ключ через SVG-фільтр), тож працює з будь-яким сайтом
+function keyFilter(id, hex, tol) {
+  const n = parseInt(String(hex).slice(1), 16), ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const tbl = c => { const a = []; for (let i = 0; i < 256; i++) a.push(Math.abs(i - c) <= tol ? 0 : 1); return a.join(' '); };
+  const fid = 'k' + id, key = hex + '|' + tol;
+  let f = document.getElementById(fid);
+  if (f && f.dataset.key === key) return 'url(#' + fid + ')';
+  if (f) f.remove();
+  kdefs.insertAdjacentHTML('beforeend', `<filter id="${fid}" data-key="${key}" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%"><feComponentTransfer in="SourceGraphic" result="d"><feFuncR type="discrete" tableValues="${tbl(ch[0])}"/><feFuncG type="discrete" tableValues="${tbl(ch[1])}"/><feFuncB type="discrete" tableValues="${tbl(ch[2])}"/></feComponentTransfer><feColorMatrix in="d" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 1 1 0 0" result="a"/><feComposite in="SourceGraphic" in2="a" operator="in"/></filter>`);
+  document.getElementById(fid).dataset.key = key;
+  return 'url(#' + fid + ')';
+}
+function fit() {   // полотно масштабується до розміру вікна й центрується (в OBS розмір джерела = розмір полотна, тож масштаб 1)
+  if (!cfg) return;
+  const s = Math.min(innerWidth / cfg.canvasW, innerHeight / cfg.canvasH);
+  const tx = (innerWidth - cfg.canvasW * s) / 2, ty = (innerHeight - cfg.canvasH * s) / 2;
+  cv.style.width = cfg.canvasW + 'px'; cv.style.height = cfg.canvasH + 'px';
+  cv.style.transform = `translate(${tx}px,${ty}px) scale(${s})`;
+}
+function apply(c) {
+  cfg = c;
+  cv.style.background = rgba(c.bgColor, c.bgOpacity / 100);
+  const keep = new Set();
+  c.layers.forEach((l, i) => {
+    if (!idOk(l.id)) return;
+    keep.add(l.id);
+    let n = nodes.get(l.id);
+    if (!n) { const el = document.createElement('div'); el.className = 'ly'; const fr = document.createElement('iframe'); fr.setAttribute('allow', 'autoplay; fullscreen'); fr.setAttribute('referrerpolicy', 'no-referrer'); fr.setAttribute('loading', 'eager'); el.append(fr); cv.append(el); n = { el, fr, src: '' }; nodes.set(l.id, n); }
+    const src = srcOf(l);
+    if (src !== n.src) { n.src = src; if (src) n.fr.src = src; else n.fr.removeAttribute('src'); }   // iframe перезавантажується лише коли змінилась адреса
+    const st = n.el.style;
+    st.left = l.x + 'px'; st.top = l.y + 'px'; st.width = l.w + 'px'; st.height = l.h + 'px';
+    st.opacity = String(l.opacity / 100); st.borderRadius = l.radius + 'px'; st.zIndex = String(i + 1);
+    // вміст шару малюється у «базовому» розмірі й масштабується до розміру шару (як джерело в OBS): збільшуєш шар - збільшується й сам віджет
+    const bw = l.bw || l.w, bh = l.bh || l.h, fs = n.fr.style;
+    fs.filter = (l.type === 'url' && l.tr) ? keyFilter(l.id, l.trc || '#17151f', l.trt == null ? 14 : l.trt) : '';
+    fs.width = bw + 'px'; fs.height = bh + 'px';
+    fs.transform = (bw === l.w && bh === l.h) ? 'none' : `scale(${l.w / bw},${l.h / bh})`;
+    // обрізання (Alt у редакторі): частина шару ховається, решта лишається на місці
+    st.clipPath = (l.cl || l.ct || l.cr || l.cb) ? `inset(${l.ct || 0}px ${l.cr || 0}px ${l.cb || 0}px ${l.cl || 0}px)` : 'none';
+    n.el.classList.toggle('hid', l.visible === false);
+  });
+  for (const [id, n] of nodes) if (!keep.has(id)) { n.el.remove(); nodes.delete(id); }
+  fit();
+}
+addEventListener('resize', fit);
+const load = () => fetch('/api/multi?p=' + encodeURIComponent(PROFILE)).then(r => r.json());
+if (PREVIEW) {
+  addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.type === 'cfg' && e.data.cfg) apply(e.data.cfg); });
+  load().then(j => { if (j && j.cfg) apply(j.cfg); try { parent.postMessage({ type: 'mvReady' }, location.origin); } catch {} }).catch(() => {});
+} else {
+  load().then(j => { if (j && j.cfg) { myId = j.id || ''; apply(j.cfg); } }).catch(() => {});
+  (function connect() {
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.onmessage = e => { try { const m = JSON.parse(e.data); if (m && m.type === 'multi' && m.cfg && (!m.id || m.id === myId)) apply(m.cfg); } catch {} };
+    ws.onclose = () => setTimeout(connect, 2000);
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  })();
+}
+})();
+</script>
+<script src="/profile-reload.js"></script>
+</body>
+</html>

@@ -44,4 +44,3 @@ function buildTemplate(params, ctx, api) {
 }
 
 module.exports = { buildTemplate, isWebLink };
-

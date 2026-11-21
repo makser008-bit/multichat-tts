@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MultiChat - нагороди</title>
+<style>
+:root{color-scheme:dark;--bg:#14141b;--panel:#1b1b25;--surface:#1b1b25;--line:#2c2c3a;--txt:#e8e8f2;--mut:#9a9ab0;--acc:#7c5cff}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:14px 'Segoe UI',system-ui,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:var(--acc);color:var(--on-acc,#fff);border:0;border-radius:8px;padding:7px 12px;font-weight:600;cursor:pointer}
+button.ghost{background:var(--surface-raised,transparent);border:1px solid var(--line);color:var(--txt)}
+button.ghost:hover{background:var(--line)}
+button.sm{padding:5px 9px;font-size:13px}
+button:disabled{opacity:.5;cursor:default}
+input[type=text],input[type=number],select,textarea{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%;min-width:0}
+input[type=color]{width:44px;height:32px;padding:2px;background:var(--bg);border:1px solid var(--line);border-radius:8px}
+input[type=range]{width:100%;accent-color:var(--acc)}
+input[type=checkbox]{accent-color:var(--acc)}
+label{display:block;color:var(--mut);font-size:12px;margin:10px 0 4px}
+label.chk{display:flex;align-items:center;gap:8px;color:var(--txt);font-size:14px;margin:8px 0}
+.note{color:var(--mut);font-size:12px;line-height:1.45;margin:6px 0}
+#app{display:flex;flex-direction:column;height:100%}
+#top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 14px;border-bottom:1px solid var(--line)}
+#top .url{display:flex;gap:6px;flex:1;min-width:260px}
+#main{flex:1;min-height:0;display:grid;grid-template-columns:240px minmax(0,1fr);gap:12px;padding:12px}
+.pane{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;overflow:auto;min-height:0}
+#list .ri{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;cursor:pointer;background:var(--surface-raised,var(--panel))}
+#list .ri.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+#list .ri .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#list .ri .pf{font-size:11px;color:var(--mut)}
+#list .ri.off .nm{opacity:.5;text-decoration:line-through}
+.row{display:flex;gap:10px;align-items:flex-end}
+.row>div{flex:1;min-width:0}
+h4{margin:16px 0 4px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);border-top:1px solid var(--line);padding-top:12px}
+h4:first-child{border-top:0;margin-top:0;padding-top:0}
+.file{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px;border:1px dashed var(--line);border-radius:10px;margin:6px 0}
+.file .fn{flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mut)}
+.file img,.file video{max-height:64px;max-width:110px;border-radius:6px;background:repeating-conic-gradient(#2b2b36 0 25%,#1d1d26 0 50%) 0 0/12px 12px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{border:1px solid var(--acc-line,var(--line));border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer;background:var(--surface-raised,var(--panel));color:var(--txt)}
+.chip:hover{border-color:var(--acc)}
+.pos{display:grid;grid-template-columns:repeat(3,34px);gap:4px}
+.pos button{height:28px;padding:0;background:var(--surface-raised,var(--panel));border:1px solid var(--line);color:var(--mut)}
+.pos button .ico{width:20px;height:20px;margin:0;vertical-align:middle}
+.pos button.on{background:var(--acc);color:var(--on-acc,#fff);border-color:var(--acc)}
+#status{margin-left:auto;font-size:12px;color:var(--mut)}
+#status.err{color:var(--danger,#ff7b7b)}
+.empty{color:var(--mut);padding:30px 10px;text-align:center;line-height:1.5}
+.num{display:flex;align-items:center;gap:8px}.num input[type=range]{flex:1}.num output{min-width:44px;text-align:right;color:var(--mut)}
+@media(max-width:760px){#main{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;overflow:auto;align-content:start;grid-auto-rows:max-content}.pane{overflow:visible}}
+.ico{width:1.3em;height:1.3em;display:inline-block;vertical-align:-.3em;object-fit:contain}
+button .ico{margin-right:2px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <label class="chk" style="margin:0"><input type="checkbox" id="enabled"> Нагороди увімкнено</label>
+    <div class="url"><input type="text" id="url" readonly><button class="sm" id="copy" type="button">Копіювати</button></div>
+    <button class="sm ghost" id="stop" type="button" title="Прибрати все, що зараз показується в OBS, і очистити чергу">⏹ Скинути чергу в OBS</button>
+    <span id="status"></span>
+  </div>
+  <div style="padding:6px 14px 0" class="note">Додай це посилання в OBS: «Джерела» → «+» → «Браузер», розмір як у сцени (наприклад, 1920 × 1080). Картинки, відео й звук нагород показуються й грають через це джерело. Нагороду за бали (Twitch і Kick) програма бачить, коли глядач її активує.</div>
+  <div id="main">
+    <div class="pane" id="list"></div>
+    <div class="pane" id="form"></div>
+  </div>
+</div>
+<script>
+(function () {
+'use strict';
+// тема: кольори беремо з вікна програми й оновлюємо щоразу, коли вона змінюється (раніше вони копіювались лише при першому відкритті)
+const THEME_VARS = ['--bg', '--panel', '--surface', '--surface-raised', '--line', '--txt', '--mut', '--mut-strong', '--acc', '--acc-line', '--success', '--warning', '--danger'];
+function lum(c) { const m = /^#?([0-9a-f]{6})$/i.exec(String(c).trim()); if (!m) { const r = /rgba?\((\d+)\D+(\d+)\D+(\d+)/.exec(String(c)); return r ? (0.299 * r[1] + 0.587 * r[2] + 0.114 * r[3]) : 0; } const n = parseInt(m[1], 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); }
+let themeKey = '';
+function syncTheme() {
+  try {
+    const root = parent.document.documentElement, cs = parent.getComputedStyle(root), st = document.documentElement.style;
+    const vals = THEME_VARS.map(k => cs.getPropertyValue(k).trim()), sc = (cs.colorScheme || '').split(' ')[0];
+    const key = vals.join('|') + sc + (root.dataset.theme || ''); if (key === themeKey) return; themeKey = key;
+    THEME_VARS.forEach((k, i) => { if (vals[i]) st.setProperty(k, vals[i]); else st.removeProperty(k); });
+    const acc = cs.getPropertyValue('--acc').trim(); st.setProperty('--on-acc', lum(acc) > 150 ? '#0a0a0a' : '#ffffff');
+    st.colorScheme = (sc === 'light' || sc === 'dark') ? sc : (lum(cs.getPropertyValue('--bg').trim()) > 150 ? 'light' : 'dark');   // схема кольорів як у програмі, інакше браузер малює вікно білим
+  } catch {}
+}
+syncTheme();
+try { new MutationObserver(syncTheme).observe(parent.document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style', 'class'] }); } catch {}
+setInterval(syncTheme, 1000);
+const $ = id => document.getElementById(id);
+const ask = (title, text, ok) => { try { if (parent && parent !== window && typeof parent.askConfirm === 'function') return parent.askConfirm(title, text, ok); } catch {} return Promise.resolve(confirm(text)); };   // власне вікно підтвердження програми (стандартне в ній заблоковано)
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+let S = { enabled: true, rules: [], files: {}, seen: [], widget: { gap: 400, maxQueue: 15 } }, sel = '', saveT = 0, loaded = false;
+const POS = ['tl', 'tc', 'tr', 'cl', 'cc', 'cr', 'bl', 'bc', 'br'], POS_I = { tl: 'a-nw', tc: 'a-up', tr: 'a-ne', cl: 'a-left', cc: 'a-dot', cr: 'a-right', bl: 'a-sw', bc: 'a-down', br: 'a-se' };
+const ANIMS = [['zoom', 'Збільшення'], ['fade', 'Поява'], ['slide', 'Виїзд знизу'], ['bounce', 'Падіння з відскоком'], ['spin', 'Обертання'], ['none', 'Без анімації']];
+const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('');
+
+function status(msg, err) { const s = $('status'); s.textContent = msg || ''; s.className = err ? 'err' : ''; }
+async function api(method, url, body) {
+  const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('Помилка ' + r.status)); return j;
+}
+function save() {
+  status('Збереження...'); clearTimeout(saveT);
+  saveT = setTimeout(async () => {
+    try { const j = await api('POST', '/api/rewards', { enabled: S.enabled, rules: S.rules, widget: S.widget }); S.files = j.files; S.seen = j.seen; status('Збережено'); }
+    catch (e) { status(e.message, true); }
+  }, 500);
+}
+async function flush() { clearTimeout(saveT); try { const j = await api('POST', '/api/rewards', { enabled: S.enabled, rules: S.rules, widget: S.widget }); S.files = j.files; S.seen = j.seen; status('Збережено'); } catch (e) { status(e.message, true); throw e; } }
+const cur = () => S.rules.find(r => r.id === sel) || null;
+
+function renderList() {
+  const box = $('list'); box.innerHTML = '';
+  const bar = el('div'); bar.style.cssText = 'display:flex;gap:4px;margin-bottom:8px';   // усі три кнопки в одному рядку
+  const add = el('button', 'sm', '＋ Нова'); add.onclick = () => { if (S.rules.length >= 60) return status('Забагато правил (максимум 60)', true); const r = { id: newId(), name: 'Нова нагорода', on: true, platform: 'any', title: '', match: 'exact', sndId: '', sndVol: 80, medId: '', medVol: 80, duration: 6, anim: 'zoom', pos: 'cc', size: 50, mx: 20, my: 20, textOn: false, textTpl: '{user} активував(-ла) «{reward}»', textSize: 36, textColor: '#ffffff', textPos: 'below', cooldown: 0, inLayer: false, matchBy: 'title', cost: 0 }; S.rules.push(r); sel = r.id; renderAll(); save(); };
+  const dup = el('button', 'sm ghost', '⧉ Копія'); dup.disabled = !cur(); dup.onclick = () => { const r = cur(); if (!r) return; const c = { ...r, id: newId(), name: (r.name + ' (копія)').slice(0, 60) }; S.rules.push(c); sel = c.id; renderAll(); save(); };
+  const del = el('button', 'sm ghost', '🗑 Видалити'); del.disabled = !cur(); del.onclick = async () => { const r = cur(); if (!r || !(await ask('Видалити правило?', 'Правило «' + r.name + '» буде видалено.', 'Видалити'))) return; S.rules = S.rules.filter(x => x !== r); sel = S.rules[0] ? S.rules[0].id : ''; renderAll(); save(); };
+  add.title = 'Нова'; dup.title = 'Копія'; del.title = 'Видалити';   // повна назва кнопки при наведенні (напис може бути обрізаний)
+  for (const b of [add, dup, del]) b.style.cssText = 'flex:0 1 auto;min-width:0;padding:5px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+  bar.append(add, dup, del); box.appendChild(bar);
+  if (!S.rules.length) { box.appendChild(el('div', 'empty', 'Правил ще немає. Натисни «＋ Нова» і вибери нагороду, звук та картинку чи відео.')); return; }
+  for (const r of S.rules) {
+    const it = el('div', 'ri' + (r.id === sel ? ' sel' : '') + (r.on ? '' : ' off'));
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = r.on; cb.title = 'Увімкнути або вимкнути правило'; cb.onclick = e => e.stopPropagation(); cb.onchange = () => { r.on = cb.checked; it.classList.toggle('off', !r.on); save(); };
+    const nm = el('div', 'nm', r.name || 'Без назви'); const pf = el('div', 'pf', r.platform === 'twitch' ? 'Twitch' : r.platform === 'kick' ? 'Kick' : 'Усі');
+    it.append(cb, nm, pf); it.onclick = () => { sel = r.id; renderAll(); }; box.appendChild(it);
+  }
+}
+
+function field(label, node) { const w = el('div'); if (label) w.appendChild(el('label', '', label)); w.appendChild(node); return w; }
+function textIn(r, k, ph, max) { const i = el('input'); i.type = 'text'; i.value = r[k] || ''; if (ph) i.placeholder = ph; i.maxLength = max || 120; i.oninput = () => { r[k] = i.value; if (k === 'name') renderListNameOnly(); save(); }; return i; }
+function renderListNameOnly() { const r = cur(); if (!r) return; const items = $('list').querySelectorAll('.ri'); const idx = S.rules.indexOf(r); const n = items[idx] && items[idx].querySelector('.nm'); if (n) n.textContent = r.name || 'Без назви'; }
+function slider(r, k, lo, hi, step, unit, fmt) {
+  const w = el('div', 'num'), i = el('input'), o = el('output'); i.type = 'range'; i.min = lo; i.max = hi; i.step = step || 1; i.value = r[k];
+  const show = () => { o.textContent = (fmt ? fmt(Number(i.value)) : i.value) + (unit || ''); }; show();
+  i.oninput = () => { r[k] = Number(i.value); show(); save(); }; w.append(i, o); return w;
+}
+function selectIn(r, k, opts) { const s = el('select'); for (const [v, t] of opts) { const o = el('option', '', t); o.value = v; s.appendChild(o); } s.value = r[k]; s.onchange = () => { r[k] = s.value; save(); }; return s; }
+
+async function upload(file, kind, r, idKey, rowStatus) {
+  rowStatus.textContent = 'Завантаження...';
+  try {
+    const resp = await fetch('/api/rewards/file?kind=' + kind, { method: 'POST', headers: { 'X-Filename': encodeURIComponent(file.name), 'Content-Type': 'application/octet-stream' }, body: file });
+    const j = await resp.json().catch(() => ({})); if (!resp.ok) throw new Error(j.error || ('Помилка ' + resp.status));
+    S.files[j.file.id] = j.file; r[idKey] = j.file.id; await flush(); renderForm();
+  } catch (e) { rowStatus.textContent = e.message; rowStatus.style.color = '#ff7b7b'; }
+}
+function fileRow(r, kind, idKey, accept) {
+  const f = S.files[r[idKey]], row = el('div', 'file'), st = el('span', 'fn', f ? f.name + '.' + f.ext : 'Файл не вибрано');
+  if (f && kind === 'media') {
+    const u = '/reward-file/' + f.id + '?v=' + f.ver;
+    if (f.kind === 'image') { const im = el('img'); im.src = u; row.appendChild(im); } else { const v = el('video'); v.src = u; v.muted = true; v.preload = 'metadata'; row.appendChild(v); }
+  }
+  row.appendChild(st);
+  const inp = el('input'); inp.type = 'file'; inp.accept = accept; inp.hidden = true; inp.onchange = () => { if (inp.files[0]) upload(inp.files[0], kind, r, idKey, st); inp.value = ''; };
+  const pick = el('button', 'sm', f ? 'Замінити' : 'Вибрати файл'); pick.onclick = () => inp.click();
+  row.append(inp, pick);
+  if (f && kind === 'sound') { const pl = el('button', 'sm ghost', '▶'); pl.title = 'Послухати'; pl.onclick = () => { try { const a = new Audio('/reward-file/' + f.id + '?v=' + f.ver); a.volume = (r.sndVol || 0) / 100; a.play(); } catch {} }; row.appendChild(pl); }
+  if (f) { const rm = el('button', 'sm ghost', '✕'); rm.title = 'Прибрати файл із правила'; rm.onclick = () => { r[idKey] = ''; renderForm(); save(); }; row.appendChild(rm); }
+  return row;
+}
+
+function renderForm() {
+  const box = $('form'); box.innerHTML = ''; const r = cur();
+  if (!r) { box.appendChild(el('div', 'empty', 'Вибери правило зліва або створи нове.')); return; }
+  box.appendChild(el('h4', '', 'Нагорода'));
+  const r1 = el('div', 'row'); r1.append(field('Назва правила (для себе)', textIn(r, 'name', '', 60)), field('Платформа', selectIn(r, 'platform', [['any', 'Twitch і Kick'], ['twitch', 'Лише Twitch'], ['kick', 'Лише Kick']]))); box.appendChild(r1);
+  const t = textIn(r, 'title', 'Точна назва нагороди, як на каналі'); t.setAttribute('list', 'seenList');
+  const dl = el('datalist'); dl.id = 'seenList'; for (const s of S.seen) { const o = el('option'); o.value = s.title; dl.appendChild(o); }
+  const mb = selectIn(r, 'matchBy', [['title', 'Назвою нагороди'], ['cost', 'Ціною (балами)'], ['both', 'Назвою і ціною (дві перевірки)']]); mb.onchange = () => { r.matchBy = mb.value; renderForm(); save(); };
+  box.appendChild(field('Спрацьовує за збігом', mb));
+  box.appendChild(dl);
+  if (r.matchBy !== 'cost') { const r2 = el('div', 'row'); r2.append(field('Назва нагороди на каналі', t), field('Збіг назви', selectIn(r, 'match', [['exact', 'Точна назва'], ['contains', 'Містить текст']]))); box.appendChild(r2); }
+  if (r.matchBy !== 'title') {
+    const ci = el('input'); ci.type = 'number'; ci.min = 1; ci.max = 1000000000; ci.value = r.cost || ''; ci.placeholder = 'Ціна нагороди в балах'; ci.oninput = () => { r.cost = Math.max(0, Math.round(Number(ci.value) || 0)); save(); };
+    box.appendChild(field(r.matchBy === 'both' ? 'Ціна в балах (має збігтися разом із назвою)' : 'Ціна в балах', ci));
+    box.appendChild(el('div', 'note', 'Ціна має збігатися точно. Kick не завжди надсилає ціну нагороди: тоді правило з перевіркою ціни не спрацює, на Twitch ціна приходить завжди.'));
+  }
+  if (S.seen.length) {
+    box.appendChild(el('div', 'note', 'Нагороди, які глядачі вже активували (натисни, щоб підставити):'));
+    const chips = el('div', 'chips'); for (const s of S.seen.slice(0, 20)) { const c = el('button', 'chip', (s.platform === 'kick' ? 'Kick · ' : 'Twitch · ') + s.title + (s.cost > 0 ? ' · ' + s.cost : '') + ' ×' + s.n); c.type = 'button'; c.onclick = () => { r.title = s.title; r.platform = s.platform; if (s.cost > 0) r.cost = s.cost; if (r.name === 'Нова нагорода') r.name = s.title.slice(0, 60); renderAll(); save(); }; chips.appendChild(c); }
+    box.appendChild(chips);
+  } else box.appendChild(el('div', 'note', 'Список «бачених» нагород з’явиться, щойно хтось активує нагороду за бали, поки програма підключена до чату. Назву можна вписати й вручну.'));
+
+  box.appendChild(el('h4', '', 'Звук'));
+  box.appendChild(fileRow(r, 'sound', 'sndId', '.mp3,.wav,.ogg,.oga,.opus,.m4a,.aac,.flac,.webm,audio/*'));
+  box.appendChild(field('Гучність звуку', slider(r, 'sndVol', 0, 100, 1, '%')));
+
+  box.appendChild(el('h4', '', 'Картинка або відео на стрімі'));
+  box.appendChild(fileRow(r, 'media', 'medId', '.png,.jpg,.jpeg,.webp,.gif,.avif,.mp4,.webm,.m4v,.mov,.ogv,image/*,video/*'));
+  const m = S.files[r.medId];
+  { const il = el('label', 'chk'), ii = el('input'); ii.type = 'checkbox'; ii.checked = !!r.inLayer; ii.onchange = () => { r.inLayer = ii.checked; save(); }; il.append(ii, document.createTextNode(' Показувати лише шаром у мульти-віджеті (в окремому джерелі rewards.html не з’являтиметься)')); box.appendChild(il); }
+  const g1 = el('div', 'row'); g1.append(field('Скільки показувати, с (0 = до кінця відео)', (() => { const i = el('input'); i.type = 'number'; i.min = 0; i.max = 120; i.value = r.duration; i.oninput = () => { r.duration = Math.min(120, Math.max(0, Math.round(Number(i.value) || 0))); save(); }; return i; })()), field('Анімація', selectIn(r, 'anim', ANIMS))); box.appendChild(g1);
+  box.appendChild(field('Розмір (% ширини сцени)', slider(r, 'size', 5, 100, 1, '%')));
+  if (m && m.kind === 'video') box.appendChild(field('Гучність відео', slider(r, 'medVol', 0, 100, 1, '%')));
+  const pg = el('div', 'pos'); for (const p of POS) { const b = el('button', p === r.pos ? 'on' : ''); { const im = document.createElement('img'); im.src = '/icons/' + POS_I[p] + '.png'; im.alt = ''; im.draggable = false; im.className = 'ico'; b.appendChild(im); } b.type = 'button'; b.title = 'Положення на сцені'; b.onclick = () => { r.pos = p; renderForm(); save(); }; pg.appendChild(b); }
+  const mr = el('div', 'row'); mr.append(field('Положення', pg), field('Відступ по горизонталі, px', slider(r, 'mx', 0, 600, 5)), field('Відступ по вертикалі, px', slider(r, 'my', 0, 600, 5))); box.appendChild(mr);
+
+  box.appendChild(el('h4', '', 'Підпис'));
+  const tl = el('label', 'chk'), ti = el('input'); ti.type = 'checkbox'; ti.checked = r.textOn; ti.onchange = () => { r.textOn = ti.checked; renderForm(); save(); }; tl.append(ti, document.createTextNode(' Показувати текст разом із картинкою')); box.appendChild(tl);
+  if (r.textOn) {
+    box.appendChild(field('Текст ({user} - хто активував, {reward} - нагорода, {input} - текст від глядача)', textIn(r, 'textTpl', '', 200)));
+    const tr = el('div', 'row'); const ci = el('input'); ci.type = 'color'; ci.value = r.textColor; ci.oninput = () => { r.textColor = ci.value; save(); };
+    tr.append(field('Розмір, px', slider(r, 'textSize', 10, 120, 1)), field('Колір', ci), field('Де', selectIn(r, 'textPos', [['below', 'Під картинкою'], ['above', 'Над картинкою']]))); box.appendChild(tr);
+  }
+  box.appendChild(el('h4', '', 'Обмеження'));
+  box.appendChild(field('Не частіше ніж раз на, с (0 = без обмеження)', (() => { const i = el('input'); i.type = 'number'; i.min = 0; i.max = 3600; i.value = r.cooldown; i.oninput = () => { r.cooldown = Math.min(3600, Math.max(0, Math.round(Number(i.value) || 0))); save(); }; return i; })()));
+  const bw = el('div'); bw.style.cssText = 'margin-top:16px;display:flex;gap:8px;flex-wrap:wrap';
+  const test = el('button', '', '▶ Перевірити в OBS'); test.onclick = async () => { try { await flush(); await api('POST', '/api/rewards/test', { id: r.id }); status('Запущено в OBS (джерело з посиланням має бути в сцені)'); } catch (e) { status(e.message, true); } };
+  bw.appendChild(test); box.appendChild(bw);
+  box.appendChild(el('div', 'note', 'У вікні OBS-джерела все йде по черзі: поки грає одна нагорода, наступні чекають. Проміжок між ними й довжину черги можна змінити нижче.'));
+  const wr = el('div', 'row'); wr.append(field('Пауза між нагородами, мс', (() => { const i = el('input'); i.type = 'number'; i.min = 0; i.max = 5000; i.value = S.widget.gap; i.oninput = () => { S.widget.gap = Math.min(5000, Math.max(0, Math.round(Number(i.value) || 0))); save(); }; return i; })()), field('Найбільша черга', (() => { const i = el('input'); i.type = 'number'; i.min = 1; i.max = 50; i.value = S.widget.maxQueue; i.oninput = () => { S.widget.maxQueue = Math.min(50, Math.max(1, Math.round(Number(i.value) || 1))); save(); }; return i; })())); box.appendChild(wr);
+}
+function renderAll() { renderList(); renderForm(); }
+
+$('url').value = location.origin + '/rewards.html';
+$('url').addEventListener('focus', e => e.target.select());
+$('copy').onclick = async () => { try { await navigator.clipboard.writeText($('url').value); } catch { $('url').select(); document.execCommand('copy'); } status('Посилання скопійовано'); };
+$('enabled').onchange = () => { S.enabled = $('enabled').checked; save(); };
+$('stop').onclick = () => api('POST', '/api/rewards/stop').then(() => status('Чергу скинуто')).catch(e => status(e.message, true));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { try { parent.postMessage({ type: 'rwClose' }, location.origin); } catch {} } });
+api('GET', '/api/rewards').then(j => { S = j; if (!S.widget) S.widget = { gap: 400, maxQueue: 15 }; $('enabled').checked = !!S.enabled; sel = S.rules[0] ? S.rules[0].id : ''; loaded = true; renderAll(); }).catch(e => status(e.message, true));
+// список «бачених» нагород оновлюємо, поки вікно відкрите
+setInterval(async () => { if (!loaded || document.hidden) return; try { const j = await api('GET', '/api/rewards'); if (j.seen && j.seen.length !== S.seen.length) { S.seen = j.seen; if (document.activeElement && document.activeElement.tagName === 'INPUT') return; renderForm(); } } catch {} }, 5000);
+})();
+</script>
+<script src="/tooltip-embed.js"></script>
+<script src="/glyph-icons.js"></script>
+</body>
+</html>

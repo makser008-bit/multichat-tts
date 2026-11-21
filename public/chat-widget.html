@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MultiChat - віджет чату</title>
+<style>
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif}
+body.preview{background:repeating-conic-gradient(#2b2b36 0 25%,#1d1d26 0 50%) 0 0/24px 24px}
+#feed{position:absolute;inset:0;box-sizing:border-box;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;
+  padding:var(--pad);gap:var(--gap);font-family:var(--font);font-size:var(--fs);line-height:var(--lh);color:var(--tc);text-shadow:var(--ts)}
+#feed.down{justify-content:flex-start}
+#feed.a-left{align-items:flex-start}#feed.a-center{align-items:center}#feed.a-right{align-items:flex-end}
+.m{position:relative;text-align:var(--ta);-webkit-backdrop-filter:blur(var(--blur));backdrop-filter:blur(var(--blur));box-shadow:var(--bsh);box-sizing:border-box;max-width:var(--mw);flex:none;display:block;overflow-wrap:anywhere;word-break:break-word;
+  padding:var(--py) var(--px);border-radius:var(--rad);border:var(--bw) solid var(--bc);background:var(--bg);
+  animation-duration:var(--am);animation-fill-mode:backwards;animation-timing-function:cubic-bezier(.22,1,.36,1);transition:opacity var(--fm),transform var(--fm)}
+.m.out{opacity:0!important}
+.m.out.o-fade{transform:scale(.96)}.m.out.o-slide{transform:translateX(calc(-1 * var(--sd)))}.m.out.o-zoom{transform:scale(.6)}.m.out.o-none{transition:none}
+.m.evt.ev-border{border:var(--ebw) solid var(--ec)}
+.m.evt.ev-fill{border:0;background:var(--ecf)}
+.m.evt.ev-stripe{border:0;border-left:4px solid var(--ec)}
+.m.evt.ev-none{border:0}
+.m.hl-card{background:var(--hlbg)}
+.m.hl-text .t{color:var(--hlc)}
+.m.flash::after{content:'';position:absolute;left:0;top:0;right:0;bottom:0;border-radius:inherit;pointer-events:none;opacity:0;box-shadow:0 0 0 2px var(--fc),0 0 18px var(--fc);animation:fl 900ms ease-out}
+@keyframes fl{0%{opacity:1}100%{opacity:0}}
+.m.stripe{border-left:4px solid var(--pc)}
+.m.evt{border:2px solid var(--ec);background:var(--bg)}
+.m .pi{display:inline-block;width:calc(1em*var(--is));height:calc(1em*var(--is));vertical-align:calc(-.15em*var(--is));margin-right:.4em}
+.m .pi svg{width:100%;height:100%;display:block}
+.m .ts{color:var(--tmc);font-size:.8em;margin-right:.5em}
+.m .u{font-size:calc(1em*var(--ns));font-weight:var(--nw);text-transform:var(--ncs);font-family:var(--nf)}
+.m .u.chip{padding:0 .4em;border-radius:.4em;display:inline-block;margin-right:.15em}
+.m .c{margin-left:.15em;margin-right:.35em}
+.m .t{font-weight:var(--mw2);font-style:var(--it);text-transform:var(--tcs);letter-spacing:var(--ls)}
+.m.own .u{display:block}.m.own .c{display:none}
+.m .ico{margin-right:.3em}
+.m img.ico{width:1.3em;height:1.3em;vertical-align:-.3em;object-fit:contain}
+.kick-emote,.twitch-emote,.youtube-emote,.tiktok-emote,.tiktok-gift{height:calc(1.8em*var(--es));max-width:calc(4em*var(--es));object-fit:contain;vertical-align:middle;margin:0 1px}
+.kick-emote-fallback{font-size:.9em;opacity:.8}
+.a-slide-l{animation-name:sl}.a-slide-r{animation-name:sr}.a-fade{animation-name:fd}.a-zoom{animation-name:zm}.a-pop{animation-name:pp}.a-none{animation:none}
+@keyframes sl{from{opacity:0;transform:translateX(calc(-1 * var(--sd)))}to{opacity:1;transform:none}}
+@keyframes sr{from{opacity:0;transform:translateX(var(--sd))}to{opacity:1;transform:none}}
+@keyframes fd{from{opacity:0}to{opacity:1}}
+@keyframes zm{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
+@keyframes pp{0%{opacity:0;transform:scale(.5)}60%{opacity:1;transform:scale(1.08)}100%{transform:none}}
+</style>
+</head>
+<body>
+<div id="feed" class="a-left"></div>
+<script>
+(() => {
+const PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
+const feed = document.getElementById('feed');
+if (PREVIEW) document.body.classList.add('preview');
+/* ---- функції показу смайлів і значків (ті самі, що в чаті програми) ---- */
+const ICONS = {
+  twitch: '<svg viewBox="0 0 24 24" fill="#9146FF"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>',
+  youtube: '<svg viewBox="0 0 24 24"><rect x="1" y="4.5" width="22" height="15" rx="4.2" fill="#FF0000"/><path d="M9.8 8.7v6.6l5.7-3.3z" fill="#fff"/></svg>',
+  tiktok: '<svg viewBox="0 0 24 24" fill="#ffffff"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>',
+  kick: '<svg viewBox="0 0 24 24" fill="#53FC18"><path d="M1.333 0h8v5.333H12V2.667h2.667V0h8v8H20v2.667h-2.667v2.666H20V16h2.667v8h-8v-2.667H12v-2.666H9.333V24h-8Z"/></svg>'
+};
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const icon = (p, cls) => { const i = el('i', cls); i.innerHTML = ICONS[p] || ''; return i; };
+const ICON = { gift: '/icons/gift.png', sub: '/icons/star.png', follow: '/icons/heart.png', raid: '/icons/rocket.png', bits: '/icons/fire.png', points: '/icons/trophy.png', hype: '/icons/diamond.png' };
+const evIcon = kind => { if (!ICON[kind]) { const f = document.createElement('img'); f.className = 'ico'; f.src = kind === 'share' ? '/icons/chain.png' : '/icons/sparkles.png'; f.alt = ''; f.draggable = false; return f; } const i = document.createElement('img'); i.className = 'ico'; i.src = ICON[kind]; i.alt = ''; i.draggable = false; return i; };
+function hue(s) { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; }
+let twitchExtraEmotes = Object.create(null);
+function twitchMessageEmotes(value, nativeEmotes) {
+  const text = String(value || ''), native = Array.isArray(nativeEmotes) ? nativeEmotes : [], ranges = [];
+  let nativeLast = 0;
+  const addExtraFrom = (from, to) => {
+    const plain = text.slice(from, to), token = /\S+/g;
+    let match;
+    while ((match = token.exec(plain))) {
+      const raw = match[0]; let name = raw, left = 0, right = raw.length, extra = twitchExtraEmotes[name];
+      while (!extra && right - left > 1) {
+        if (/[([{<"'`.,!?;:]/.test(name[0])) { name = name.slice(1); left++; }
+        else if (/[)\]}>.,!?;:'"`]/.test(name[name.length - 1])) { name = name.slice(0, -1); right--; }
+        else break;
+        extra = twitchExtraEmotes[name];
+      }
+      if (extra && extra.src) ranges.push({ start: from + match.index + left, end: from + match.index + right - 1, id: '', src: extra.src, provider: extra.provider });
+    }
+  };
+  for (const emote of native) {
+    const start = Number(emote.start), end = Number(emote.end), id = String(emote.id || '');
+    if (!/^[\w-]+$/.test(id) || !Number.isInteger(start) || !Number.isInteger(end) || start < nativeLast || end < start || end >= text.length) continue;
+    addExtraFrom(nativeLast, start);
+    ranges.push({ start, end, id, src: '', provider: 'twitch' });
+    nativeLast = end + 1;
+  }
+  addExtraFrom(nativeLast, text.length);
+  return ranges.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+function appendKickEmotes(target, value) {
+  const text = String(value || ''), token = /\[emote:(\d+):([^\]]*)\]/g;
+  let last = 0, match;
+  while ((match = token.exec(text))) {
+    if (match.index > last) target.append(document.createTextNode(text.slice(last, match.index)));
+    const [, id, name] = match, img = el('img', 'kick-emote');
+    img.src = `https://files.kick.com/emotes/${id}/fullsize`;
+    img.alt = name || 'Kick emote'; img.title = name || 'Kick emote'; img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
+    img.onerror = () => img.replaceWith(el('span', 'kick-emote-fallback', name || `[emote:${id}]`));
+    target.append(img); last = token.lastIndex;
+  }
+  if (last < text.length) target.append(document.createTextNode(text.slice(last)));
+}
+function appendTwitchEmotes(target, value, emotes) {
+  const text = String(value || ''), ranges = twitchMessageEmotes(text, emotes);
+  let last = 0;
+  for (const emote of ranges) {
+    const start = Number(emote.start), end = Number(emote.end), id = String(emote.id || '');
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < last || end < start || end >= text.length) continue;
+    if (start > last) target.append(document.createTextNode(text.slice(last, start)));
+    const name = text.slice(start, end + 1), img = el('img', 'twitch-emote');
+    img.src = emote.src || `https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(id)}/default/dark/2.0`;
+    img.alt = name; img.title = name; img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
+    img.onerror = () => img.replaceWith(el('span', 'kick-emote-fallback', name));
+    target.append(img); last = end + 1;
+  }
+  if (last < text.length) target.append(document.createTextNode(text.slice(last)));
+}
+function appendYouTubeEmotes(target, value, emotes) {
+  const text = String(value || ''), list = Array.isArray(emotes) ? emotes : [];
+  const safeSrc = src => {
+    try {
+      const u = new URL(src);
+      return u.protocol === 'https:' && /(^|\.)(?:ggpht\.com|googleusercontent\.com|gstatic\.com|youtube\.com|ytimg\.com)$/i.test(u.hostname) ? u.href : '';
+    } catch { return ''; }
+  };
+  let last = 0;
+  for (const em of list) {
+    const start = Number(em && em.start), end = Number(em && em.end);
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < last || end < start || end >= text.length) continue;
+    if (start > last) target.append(document.createTextNode(text.slice(last, start)));
+    const name = String(em.alt || text.slice(start, end + 1)), src = safeSrc(em.src);
+    if (src) {
+      const img = el('img', 'youtube-emote');
+      img.src = src; img.alt = name; img.title = name; img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
+      img.onerror = () => img.replaceWith(el('span', 'kick-emote-fallback', text.slice(start, end + 1) || name));
+      target.append(img);
+    } else target.append(document.createTextNode(text.slice(start, end + 1)));
+    last = end + 1;
+  }
+  if (last < text.length) target.append(document.createTextNode(text.slice(last)));
+}
+function appendTikTokEmotes(target, value, emotes) {
+  const text = String(value || ''), list = Array.isArray(emotes) ? emotes : [];
+  const safeSrc = src => typeof src === 'string' && /^https:\/\/(?:[\w-]+\.)*tiktokcdn\.com\//i.test(src) ? src : '';
+  const positioned = list.map(e => ({ ...e, start: Number(e.start), end: Number(e.end) }))
+    .filter(e => Number.isInteger(e.start) && Number.isInteger(e.end) && e.start >= 0 && e.end >= e.start && e.end < text.length)
+    .sort((a, b) => a.start - b.start);
+  if (positioned.length) {
+    let last = 0;
+    for (const em of positioned) {
+      if (em.start < last) continue;
+      if (em.start > last) target.append(document.createTextNode(text.slice(last, em.start)));
+      appendOne(em, text.slice(em.start, em.end + 1)); last = em.end + 1;
+    }
+    if (last < text.length) target.append(document.createTextNode(text.slice(last)));
+    return;
+  }
+  if (text) target.append(document.createTextNode(text));
+  for (const em of list) appendOne(em, em.alt || 'стікер');
+  function appendOne(em, fallback) {
+    const src = safeSrc(em && em.src), name = String(em && (em.alt || em.name) || fallback || 'стікер');
+    if (!src) { target.append(document.createTextNode(name)); return; }
+    const img = el('img', 'tiktok-emote');
+    img.src = src; img.alt = name; img.title = name; img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
+    img.onerror = () => img.replaceWith(el('span', 'kick-emote-fallback', name));
+    target.append(img);
+  }
+}
+const PCOL = { twitch: '#9146ff', youtube: '#ff4e45', tiktok: '#25f4ee', kick: '#53fc18' };
+let cfg = null, myId = '';
+const PROFILE = new URLSearchParams(location.search).get('p') || '';   // профіль (сцена) із посилання: ?p=ID
+const rgba = (hex, a) => { const n = parseInt(String(hex).slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+const alpha = (col, a) => String(col).charAt(0) === '#' ? rgba(col, a) : String(col).replace(/^hsl\(/, 'hsla(').replace(/\)$/, ',' + a + ')');
+const list = v => String(v || '').split(/[,;\n]/).map(x => x.trim().toLowerCase()).filter(Boolean);
+function setTwitchExtra(value) {
+  const next = Object.create(null), source = value && typeof value === 'object' ? value : {};
+  for (const [name, emote] of Object.entries(source)) {
+    if (!name || !emote || typeof emote.src !== 'string' || !/^https:\/\/(?:cdn\.betterttv\.net|cdn\.7tv\.app|cdn2?\.frankerfacez\.com)\//.test(emote.src)) continue;
+    next[name] = { src: emote.src, provider: ['7tv', 'ffz'].includes(emote.provider) ? emote.provider : 'bttv' };
+  }
+  twitchExtraEmotes = next;
+}
+/* ---- застосування налаштувань: усе через CSS-змінні, тож чинні повідомлення змінюються одразу ---- */
+function applyCfg(c) {
+  cfg = c;
+  const st = feed.style, f = String(c.font || 'Segoe UI').replace(/["\\]/g, '');
+  st.setProperty('--font', `"${f}", "Segoe UI", system-ui, sans-serif`);
+  st.setProperty('--fs', c.fontSize + 'px'); st.setProperty('--lh', c.lineHeight + '%'); st.setProperty('--tc', c.textColor);
+  st.setProperty('--sd', Math.min(40, Math.max(0, c.padding)) + 'px');   // виїзд не далі за відступ від краю, щоб повідомлення не обрізалось краєм віджета
+  st.setProperty('--gap', c.gap + 'px'); st.setProperty('--pad', c.padding + 'px'); st.setProperty('--mw', c.maxWidth + '%');
+  st.setProperty('--am', c.animMs + 'ms'); st.setProperty('--fm', c.fadeMs + 'ms');
+  st.setProperty('--nw', c.nameBold ? '700' : '400'); st.setProperty('--mw2', c.msgBold ? '700' : '400');
+  st.setProperty('--ns', c.nameSize / 100); st.setProperty('--is', c.iconSize / 100); st.setProperty('--es', c.emoteScale / 100);
+  st.setProperty('--tmc', c.timeColor); st.setProperty('--ec', c.eventColor);
+  st.setProperty('--px', c.padX + 'px'); st.setProperty('--py', c.padY + 'px'); st.setProperty('--rad', c.radius + 'px');
+  st.setProperty('--bw', c.borderWidth + 'px'); st.setProperty('--bc', c.borderColor);
+  st.setProperty('--bg', c.bgStyle !== 'card' ? 'transparent' : c.bgGradient ? `linear-gradient(90deg, ${rgba(c.bgColor, c.bgOpacity / 100)}, ${rgba(c.bgColor2, c.bgOpacity / 100)})` : rgba(c.bgColor, c.bgOpacity / 100));
+  st.setProperty('--blur', c.blur + 'px'); st.setProperty('--bsh', c.boxShadow ? '0 4px 14px rgba(0,0,0,.45)' : 'none');
+  st.setProperty('--ta', c.textAlign); st.setProperty('--it', c.italic ? 'italic' : 'normal'); st.setProperty('--ls', c.letterSpacing + 'px');
+  st.setProperty('--tcs', c.textCase === 'upper' ? 'uppercase' : c.textCase === 'lower' ? 'lowercase' : 'none');
+  st.setProperty('--ncs', c.nameCase === 'upper' ? 'uppercase' : c.nameCase === 'lower' ? 'lowercase' : 'none');
+  st.setProperty('--nf', c.nameFont ? `"${String(c.nameFont).replace(/["\\]/g, '')}", "Segoe UI", system-ui, sans-serif` : 'inherit');
+  st.setProperty('--ebw', c.eventBorderWidth + 'px'); st.setProperty('--ecf', rgba(c.eventColor, .28));
+  st.setProperty('--hlbg', rgba(c.hlColor, .35)); st.setProperty('--hlc', c.hlColor); st.setProperty('--fc', c.flashColor);
+  const edge = c.fadeEdge > 0 ? `linear-gradient(to ${c.direction === 'down' ? 'top' : 'bottom'}, transparent 0, #000 ${c.fadeEdge}px)` : 'none';   // затухання краю зі старими повідомленнями
+  st.setProperty('-webkit-mask-image', edge); st.setProperty('mask-image', edge);
+  const sh = [];
+  if (c.outline > 0) for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8; sh.push(`${(Math.cos(a) * c.outline).toFixed(2)}px ${(Math.sin(a) * c.outline).toFixed(2)}px 0 ${c.outlineColor}`); }
+  if (c.shadow) sh.push('0 2px 6px rgba(0,0,0,.75)');
+  st.setProperty('--ts', sh.length ? sh.join(',') : 'none');
+  feed.className = (c.direction === 'down' ? 'down ' : '') + 'a-' + c.align;
+  rerender();   // існуючі повідомлення будуються заново з новими налаштуваннями
+}
+function trim() {   // зайві повідомлення прибираються з екрана: за кількістю й за висотою (у списку items вони лишаються для перебудови)
+  const old = () => feed.classList.contains('down') ? feed.lastElementChild : feed.firstElementChild;
+  while (feed.children.length > cfg.maxMessages && old()) old().remove();
+  while (feed.scrollHeight > feed.clientHeight + 1 && feed.children.length > 1 && old()) old().remove();
+}
+/* Усі повідомлення зберігаються «сирими» (items). Щойно змінюються налаштування, вигляд перебудовується з них, тому зміни
+   (двокрапка, значки, час, фільтри, смайли тощо) видно одразу, без перезапуску й без нових повідомлень. */
+const items = [];
+const expired = it => !PREVIEW && cfg.lifetime > 0 && Date.now() - it.at >= cfg.lifetime * 1000;
+function mount(it, animate) {
+  const d = it.k === 'e' ? buildEvt(it.m) : buildChat(it.m);
+  if (!d) return;
+  if (animate) d.classList.add('a-' + (cfg.anim === 'slide' ? (cfg.align === 'right' ? 'slide-r' : 'slide-l') : cfg.anim));
+  if (animate && cfg.flash) d.classList.add('flash');
+  if (cfg.direction === 'down') feed.insertBefore(d, feed.firstChild); else feed.appendChild(d);
+  if (!PREVIEW && cfg.lifetime > 0) {   // у перегляді повідомлення не зникають, щоб зміни було видно
+    const rem = Math.max(0, cfg.lifetime * 1000 - (Date.now() - it.at));
+    setTimeout(() => { d.classList.add('out', 'o-' + cfg.outAnim); setTimeout(() => { d.remove(); const k = items.indexOf(it); if (k >= 0) items.splice(k, 1); }, cfg.outAnim === 'none' ? 0 : cfg.fadeMs + 80); }, rem);
+  }
+}
+function rerender() { feed.replaceChildren(); for (const it of items) if (!expired(it)) mount(it, false); trim(); }
+function add(kind, m, test) {
+  if (cfg && cfg.hideRepeats && kind === 'c' && !test) {   // однакове повідомлення від того самого глядача підряд (протягом 15 с) ховається
+    for (let i = items.length - 1; i >= 0; i--) { const o = items[i]; if (o.k !== 'c' || o.test) continue; if (o.m.user === m.user && o.m.text === m.text && Date.now() - o.at < 15000) return; break; }
+  }
+  const it = { k: kind, m, at: Date.now(), test: !!test }; items.push(it); if (items.length > 80) items.shift(); if (cfg) { mount(it, true); trim(); } }
+function stampEl(m) {
+  const t = new Date(Number(m && m.ts) || Date.now()), f = cfg.timeFormat;
+  const o = f === 'h12' ? { hour: 'numeric', minute: '2-digit', hour12: true } : f === 'hms' ? { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false } : { hour: '2-digit', minute: '2-digit', hour12: false };
+  return el('span', 'ts', t.toLocaleTimeString(f === 'h12' ? 'en-US' : 'uk-UA', o));
+}
+function nameEl(m, bright) {   // ім'я: колір, плашка, обрізання
+  let n = String(m.user || ''); if (cfg.nameMaxLen > 0 && n.length > cfg.nameMaxLen) n = n.slice(0, cfg.nameMaxLen) + '…';
+  const u = el('span', 'u' + (cfg.nameChip ? ' chip' : ''), n), col = nameColor(m, bright);
+  u.style.color = col; if (cfg.nameChip) u.style.background = alpha(col, .22);
+  return u;
+}
+function nameColor(m, bright) {
+  if (cfg.nameColorMode === 'fixed') return cfg.nameColor;
+  if (cfg.nameColorMode === 'platform') return PCOL[m.platform] || cfg.nameColor;
+  return `hsl(${hue(m.user)},70%,${bright}%)`;
+}
+function plainKick(t) { return String(t || '').replace(/\[emote:\d+:([^\]]*)\]/g, (a, n) => n || ''); }
+function allowed(m, isEvent) {
+  const c = cfg, pl = 'show' + String(m.platform || '').replace(/^./, x => x.toUpperCase());
+  if (c[pl] === false) return false;
+  if (isEvent) {
+    if (!c.events) return false;
+    const k = m.kind; if (k === 'follow' && !c.evFollow) return false; if (k === 'sub' && !c.evSub) return false; if (k === 'gift' && !c.evGift) return false;
+    if (!['follow', 'sub', 'gift'].includes(k) && !c.evOther) return false;
+    return true;
+  }
+  const t = String(m.text || '');
+  if (c.hideCommands && /^\s*!/.test(t)) return false;
+  if (c.minLen > 0 && t.trim().length < c.minLen) return false;
+  if (list(c.hideUsers).includes(String(m.user || '').toLowerCase())) return false;
+  const low = t.toLowerCase(); if (list(c.hideWords).some(w => low.includes(w))) return false;
+  if (c.links === 'hide' && /https?:\/\/|www\./i.test(t)) return false;
+  return true;
+}
+function buildChat(m) {
+  if (!allowed(m, false)) return null;
+  let text = String(m.text || '');
+  if (cfg.links === 'strip') text = text.replace(/https?:\/\/\S+|www\.\S+/gi, '').replace(/\s{2,}/g, ' ').trim();
+  if (!text) return null;
+  const plain = !cfg.showEmotes;
+  if (cfg.maxLen > 0 && plain && text.length > cfg.maxLen) text = text.slice(0, cfg.maxLen).trimEnd() + '…';
+  const d = el('div', 'm p-' + m.platform + (cfg.nameOwnLine ? ' own' : '') + (cfg.stripe ? ' stripe' : ''));
+  d.style.setProperty('--pc', PCOL[m.platform] || '#888');
+  if (cfg.showTime) d.append(stampEl(m));
+  if (cfg.showPlatform && ICONS[m.platform]) d.append(icon(m.platform, 'pi'));
+  d.append(nameEl(m, 72), el('span', 'c', cfg.showColon ? (cfg.separator || ':') : ''));
+  const hw = list(cfg.hlWords);
+  if (hw.length && hw.some(w => text.toLowerCase().includes(w))) { if (cfg.hlMode !== 'text') d.classList.add('hl-card'); if (cfg.hlMode !== 'card') d.classList.add('hl-text'); }   // слова-тригери: виділення фоном і/або кольором тексту
+  const body = el('span', 't');
+  if (plain) body.textContent = m.platform === 'kick' ? plainKick(text) : text;
+  else {
+    if (cfg.maxLen > 0 && text.length > cfg.maxLen && !/\[emote:/.test(text) && !(m.emotes && m.emotes.length)) text = text.slice(0, cfg.maxLen).trimEnd() + '…';   // у повідомленнях зі смайлами не ріжемо, щоб не зламати позиції
+    if (m.platform === 'kick') appendKickEmotes(body, text);
+    else if (m.platform === 'twitch') appendTwitchEmotes(body, text, m.emotes);
+    else if (m.platform === 'youtube' && Array.isArray(m.emotes) && m.emotes.length) appendYouTubeEmotes(body, text, m.emotes);
+    else if (m.platform === 'tiktok' && Array.isArray(m.emotes) && m.emotes.length) appendTikTokEmotes(body, text, m.emotes);
+    else body.textContent = text;
+  }
+  d.append(body);
+  return d;
+}
+function buildEvt(m) {
+  if (!allowed(m, true)) return null;
+  const d = el('div', 'm evt ev-' + cfg.eventStyle + ' p-' + m.platform + (cfg.nameOwnLine ? ' own' : ''));
+  if (cfg.showTime) d.append(stampEl(m));
+  if (cfg.showPlatform && ICONS[m.platform]) d.append(icon(m.platform, 'pi'));
+  if (cfg.eventIcon) d.append(evIcon(m.kind));
+  d.append(nameEl(m, 78), el('span', 'c', ''));
+  if (m.image && m.platform === 'tiktok' && /^https:\/\/(?:[\w-]+\.)*tiktokcdn\.com\//i.test(m.image)) {
+    const img = el('img', 'tiktok-gift'); img.src = m.image; img.alt = 'Подарунок TikTok'; img.referrerPolicy = 'no-referrer'; img.onerror = () => img.remove(); d.append(img);
+  }
+  d.append(el('span', 't', ' ' + (m.text || '')));
+  return d;
+}
+const addChat = (m, t) => add('c', m, t), addEvt = (m, t) => add('e', m, t);
+/* ---- зразки повідомлень (перегляд у вікні налаштувань і кнопка «Тест у OBS») ---- */
+const SAMPLES = [
+  { type: 'chat', platform: 'twitch', user: 'imakcoc', text: 'Привіт, чат! Як справи?' },
+  { type: 'chat', platform: 'youtube', user: 'Оленка', text: 'Дуже цікавий стрім, дякую!' },
+  { type: 'chat', platform: 'tiktok', user: 'dasha_live', text: 'Підписалась, чекаю розіграш' },
+  { type: 'chat', platform: 'kick', user: 'Andriy77', text: 'Це довге повідомлення, щоб було видно перенесення рядка у віджеті чату в OBS і відступи' },
+  { type: 'event', platform: 'twitch', kind: 'follow', user: 'Новий_Глядач', text: 'тепер стежить за каналом' },
+  { type: 'chat', platform: 'twitch', user: 'Markiyan', text: 'GG, дуже круто 🔥' },
+  { type: 'event', platform: 'tiktok', kind: 'gift', user: 'Sofiia', text: 'подарувала Rose x5' },
+  { type: 'chat', platform: 'youtube', user: 'Тарас', text: '!команда (її можна сховати)' },
+];
+let sampleN = 0;
+function playSamples(count, step, test) {
+  for (let i = 0; i < count; i++) setTimeout(() => { const m = { ...SAMPLES[sampleN++ % SAMPLES.length], ts: Date.now() }; (m.type === 'event' ? addEvt : addChat)(m, test); }, i * step);
+}
+let testTimer = null, pendingTest = null;
+function startTest() {   // безперервний тест: зразки з'являються, доки його не зупинять кнопкою «Зупинити тест»
+  if (testTimer) return;
+  playSamples(4, 350, true);
+  testTimer = setInterval(() => playSamples(1, 0, true), 1700);
+}
+function stopTest() {
+  clearInterval(testTimer); testTimer = null;
+  for (let i = items.length - 1; i >= 0; i--) if (items[i].test) items.splice(i, 1);
+  if (cfg) rerender();
+}
+function onTest(m) { if (m.on === false) stopTest(); else startTest(); }
+function onMsg(m) {
+  if (!m || typeof m !== 'object') return;
+  if (m.type === 'chat') addChat(m);
+  else if (m.type === 'event') addEvt(m);
+  else if (m.type === 'twitchEmotes') setTwitchExtra(m.emotes);
+  else if (m.type === 'chatWidget' && m.cfg) { if (!m.id || m.id === myId) applyCfg(m.cfg); }
+  else if (m.type === 'cwTest') { if (!myId) pendingTest = m; else if (!m.id || m.id === myId) onTest(m); }
+  else if (m.type === 'cmd' && m.cmd === 'clearfeed') { items.length = 0; feed.replaceChildren(); }
+}
+if (PREVIEW) {
+  addEventListener('message', e => {
+    if (e.origin !== location.origin || !e.data) return;
+    if (e.data.type === 'cfg') applyCfg(e.data.cfg);
+    else if (e.data.type === 'play') { items.length = 0; feed.replaceChildren(); playSamples(e.data.count || 6, 350); }
+  });
+  fetch('/api/chat-widget?p=' + encodeURIComponent(PROFILE)).then(r => r.json()).then(j => { if (j && j.cfg) { myId = j.id || ''; applyCfg(j.cfg); } try { parent.postMessage({ type: 'cwReady' }, location.origin); } catch {} }).catch(() => {});
+} else {
+  fetch('/api/chat-widget?p=' + encodeURIComponent(PROFILE)).then(r => r.json()).then(j => { if (j && j.cfg) { myId = j.id || ''; applyCfg(j.cfg); if (pendingTest && (!pendingTest.id || pendingTest.id === myId)) onTest(pendingTest); pendingTest = null; } }).catch(() => {});
+  (function connect() {
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.onmessage = e => { try { onMsg(JSON.parse(e.data)); } catch {} };
+    ws.onclose = () => setTimeout(connect, 2000);
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  })();
+}
+})();
+</script>
+<script src="/profile-reload.js"></script>
+</body>
+</html>

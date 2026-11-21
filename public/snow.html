@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MultiChat - сніг</title>
+<style>
+html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+body.preview{background:repeating-conic-gradient(#2b2b36 0 25%,#1d1d26 0 50%) 0 0/24px 24px}
+</style>
+</head>
+<body>
+<script src="/festive.js"></script>
+<script>
+/* Віджет «Сніг» для OBS і мульти-віджета: падає сніг із налаштувань програми (Програма → Вигляд → Зима).
+   Вмикається окремою галочкою «Сніг у віджетах» (сніг у самій програмі від неї не залежить). Замет унизу не накопичується. */
+(function () {
+  if (new URLSearchParams(location.search).has('preview')) document.body.classList.add('preview');
+  function apply(o) {
+    if (!o || !window.Festive) return;
+    window.Festive.set({ snow: !!o.snowWidgets, snowCount: o.snowCount, snowSpeed: o.snowSpeed, snowSize: o.snowSize, snowWind: o.snowWind, snowOnWin: false, xmas: false, ground: false, off: false });
+  }
+  fetch('/api/festive', { cache: 'no-store' }).then(r => r.json()).then(apply).catch(() => {});
+  (function connect() {
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.onmessage = e => { try { const m = JSON.parse(e.data); if (m && m.type === 'festive') apply(m.cfg); } catch {} };
+    ws.onclose = () => setTimeout(connect, 2000);
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  })();
+})();
+</script>
+<script src="/profile-reload.js"></script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MultiChat - нагороди</title>
+<style>
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif}
+body.preview{background:repeating-conic-gradient(#2b2b36 0 25%,#1d1d26 0 50%) 0 0/24px 24px}
+#hint{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;color:#c9c9d6;font-size:20px;padding:0 20px;display:none}
+body.preview #hint{display:block}
+.it{position:absolute;max-width:100%;max-height:100%;box-sizing:border-box}
+.in{display:flex;flex-direction:column;align-items:center;gap:12px;transition:opacity .45s ease,transform .45s cubic-bezier(.22,1,.36,1)}
+.in.pre{opacity:0}
+.in.pre.an-zoom{transform:scale(.6)}
+.in.pre.an-slide{transform:translateY(70px)}
+.in.pre.an-bounce{transform:translateY(-120px)}
+.in.pre.an-spin{transform:rotate(-180deg) scale(.3)}
+.in.an-none{transition:none}
+.in.bounce-in{animation:bnc .7s cubic-bezier(.28,.84,.42,1) both}
+@keyframes bnc{0%{opacity:0;transform:translateY(-140px)}55%{opacity:1;transform:translateY(0)}72%{transform:translateY(-26px)}86%{transform:translateY(0)}93%{transform:translateY(-8px)}100%{transform:translateY(0)}}
+.in.out{opacity:0}
+.in.out.an-zoom{transform:scale(.6)}
+.in.out.an-slide{transform:translateY(70px)}
+.in.out.an-bounce{transform:translateY(80px) scale(.8)}
+.in.out.an-spin{transform:rotate(180deg) scale(.3)}
+.in img,.in video{display:block;max-width:100%;max-height:100vh;height:auto;object-fit:contain;background:transparent}
+.tx{font-weight:800;text-align:center;white-space:pre-wrap;word-break:break-word;text-shadow:0 2px 6px rgba(0,0,0,.85),0 0 2px rgba(0,0,0,.9);line-height:1.15}
+</style>
+</head>
+<body>
+<div id="hint">Тут з'являтимуться картинки, відео й текст за нагороди за бали каналу, а звук гратиме в OBS.</div>
+<div id="stage"></div>
+<script>
+(function () {
+'use strict';
+const QP = new URLSearchParams(location.search), PREVIEW = QP.has('preview'), RULE_ID = QP.get('rule') || '';   // ?rule=ID: шар мульти-віджета лише для однієї нагороди
+if (PREVIEW) document.body.classList.add('preview');
+const stage = document.getElementById('stage');
+let cfg = { gap: 400, maxQueue: 15 }, queue = [], busy = false, genId = 0;
+const active = new Set();   // списки очищення для завдань, що зараз виконуються (щоб «Скинути чергу» зупиняла все одразу)
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function place(el, pos, mx, my) {
+  const s = el.style, v = pos[0], h = pos[1], tr = [];
+  if (v === 't') s.top = my + 'px'; else if (v === 'b') s.bottom = my + 'px'; else { s.top = '50%'; tr.push('translateY(-50%)'); }
+  if (h === 'l') s.left = mx + 'px'; else if (h === 'r') s.right = mx + 'px'; else { s.left = '50%'; tr.push('translateX(-50%)'); }
+  if (tr.length) s.transform = tr.join(' ');
+}
+function fill(tpl, ctx) { return String(tpl || '').replace(/\{user\}/g, ctx.user).replace(/\{reward\}/g, ctx.reward).replace(/\{input\}/g, ctx.input || ''); }
+
+async function run(job, myGen) {
+  let r = job.rule; const ctx = job, cleanups = []; active.add(cleanups);
+  if (RULE_ID) r = { ...r, pos: 'cc', mx: 0, my: 0, size: 100 };   // у шарі картинка вписується в усю область шару
+  const alive = () => myGen === genId;
+  let sndDone = Promise.resolve(), medDone = Promise.resolve(), host = null, inner = null;
+  // звук
+  if (r.snd) {
+    sndDone = new Promise(res => {
+      try {
+        const a = new Audio(r.snd.url); a.volume = Math.min(1, Math.max(0, (r.sndVol || 0) / 100));
+        const fin = () => res(); a.onended = fin; a.onerror = fin; setTimeout(fin, 60000);
+        cleanups.push(() => { try { a.pause(); } catch {} fin(); });
+        a.play().catch(fin);
+      } catch { res(); }
+    });
+  }
+  // картинка / відео / текст
+  const hasMedia = !!r.med, hasText = !!r.textOn;
+  if (hasMedia || hasText) {
+    host = document.createElement('div'); host.className = 'it'; place(host, r.pos || 'cc', r.mx || 0, r.my || 0);
+    inner = document.createElement('div'); inner.className = 'in pre an-' + (r.anim || 'zoom');
+    const text = () => { const d = document.createElement('div'); d.className = 'tx'; d.style.fontSize = (r.textSize || 36) + 'px'; d.style.color = r.textColor || '#fff'; d.textContent = fill(r.textTpl, ctx); return d; };
+    const w = Math.max(40, Math.round(innerWidth * (r.size || 50) / 100));
+    let ready = Promise.resolve(), vid = null;
+    if (hasText && r.textPos === 'above') inner.appendChild(text());
+    if (hasMedia) {
+      if (r.med.kind === 'video') {
+        vid = document.createElement('video'); vid.src = r.med.url; vid.playsInline = true; vid.preload = 'auto'; vid.style.width = w + 'px'; vid.volume = Math.min(1, Math.max(0, (r.medVol || 0) / 100));
+        ready = new Promise(res => { vid.oncanplay = res; vid.onerror = res; setTimeout(res, 8000); });
+        inner.appendChild(vid);
+      } else {
+        const im = document.createElement('img'); im.src = r.med.url; im.style.width = w + 'px'; im.alt = '';
+        ready = new Promise(res => { im.onload = res; im.onerror = res; setTimeout(res, 8000); });
+        inner.appendChild(im);
+      }
+    }
+    if (hasText && r.textPos !== 'above') inner.appendChild(text());
+    host.appendChild(inner); stage.appendChild(host);
+    cleanups.push(() => { try { host.remove(); } catch {} });
+    await ready;
+    if (!alive()) { cleanups.forEach(f => f()); active.delete(cleanups); return; }
+    // поява
+    void inner.offsetWidth;
+    if (r.anim === 'bounce') { inner.classList.remove('pre'); inner.classList.add('bounce-in'); }
+    else inner.classList.remove('pre');
+    let playP = Promise.resolve();
+    if (vid) { playP = vid.play().catch(() => { vid.muted = true; return vid.play().catch(() => {}); }); }
+    const dur = r.duration > 0 ? r.duration * 1000 : (vid ? 120000 : 6000);
+    medDone = new Promise(res => {
+      let done = false; const fin = () => { if (!done) { done = true; res(); } };
+      setTimeout(fin, dur);
+      if (vid) { if (r.duration > 0) vid.loop = true; else vid.onended = fin; }
+      cleanups.push(fin);
+    });
+    await playP;
+  }
+  await Promise.all([medDone, sndDone]);
+  // зникнення
+  if (host && inner && alive()) {
+    inner.classList.remove('bounce-in'); inner.classList.add('out');
+    await sleep(r.anim === 'none' ? 0 : 480);
+  }
+  cleanups.forEach(f => f()); active.delete(cleanups);
+}
+
+async function pump() {
+  if (busy) return; busy = true;
+  while (queue.length) {
+    const job = queue.shift(), myGen = genId;
+    try { await run(job, myGen); } catch {}
+    if (myGen !== genId) continue;
+    if (queue.length) await sleep(Math.max(0, cfg.gap));
+  }
+  busy = false;
+}
+function stopAll() { genId++; queue.length = 0; for (const c of [...active]) { c.forEach(f => { try { f(); } catch {} }); } active.clear(); stage.innerHTML = ''; try { document.querySelectorAll('audio').forEach(a => a.pause()); } catch {} }
+
+fetch('/api/rewards', { cache: 'no-store' }).then(r => r.json()).then(j => { if (j && j.widget) cfg = j.widget; }).catch(() => {});
+(function connect() {
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  ws.onmessage = e => {
+    try {
+      const m = JSON.parse(e.data); if (!m) return;
+      if (m.type === 'rewardFire' && m.rule) {
+        if (RULE_ID ? m.rule.id !== RULE_ID : m.rule.inLayer) return;   // правило, яке показує шар мульти-віджета, окреме джерело пропускає
+        if (queue.length >= (cfg.maxQueue || 15)) return;
+        queue.push({ rule: m.rule, user: m.user || '', reward: m.reward || '', input: m.input || '' }); pump();
+      } else if (m.type === 'rewardStop') stopAll();
+      else if (m.type === 'rewardsCfg' && m.widget) cfg = m.widget;
+    } catch {}
+  };
+  ws.onclose = () => setTimeout(connect, 2000);
+  ws.onerror = () => { try { ws.close(); } catch {} };
+})();
+})();
+</script>
+<script src="/profile-reload.js"></script>
+</body>
+</html>
